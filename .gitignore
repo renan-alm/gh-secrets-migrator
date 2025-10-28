@@ -1,0 +1,60 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.out
+coverage.html
+
+# Go workspace file
+go.work
+
+# Dependency directories
+vendor/
+
+# Build artifacts
+dist/
+bin/
+gh-secrets-migrator
+gh-secrets-migrator-*
+
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+*.iml
+*.sublime-project
+*.sublime-workspace
+
+# goreleaser
+dist/
+
+# Release binaries
+*.tar.gz
+*.zip
+
+# OS files
+Thumbs.db
+.env
+.env.local
+
+# IDE specific files
+.vscode/launch.json
+.vscode/settings.json
+
+src-old/obj/
+
+gh-secrets-migrator
+
+

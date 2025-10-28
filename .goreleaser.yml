@@ -1,0 +1,53 @@
+version: 2
+
+project_name: gh-secrets-migrator
+
+builds:
+  - main: ./cmd/gh-secrets-migrator
+    binary: gh-secrets-migrator
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    goarm:
+      - "7"
+    ldflags:
+      - -X main.Version={{ .Version }}
+      - -X main.CommitSHA={{ .Commit }}
+      - -X main.BuildDate={{ .Date }}
+    tags:
+      - static
+
+archives:
+  - format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - GO_README.md
+      - LICENSE
+      - RELEASENOTES.md
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+release:
+  draft: false
+  prerelease: false
+  name_template: "v{{ .Version }}"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
