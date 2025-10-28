@@ -58,10 +58,9 @@ func (l *Logger) Error(err error) {
 	os.Exit(1)
 }
 
-// Errorf logs a formatted error message and exits.
+// Errorf logs a formatted error message.
 func (l *Logger) Errorf(format string, args ...interface{}) {
 	fmt.Fprintf(os.Stderr, "[ERROR] "+format+"\n", args...)
-	os.Exit(1)
 }
 
 // Fatal logs a fatal message and exits.
