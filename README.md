@@ -172,6 +172,7 @@ gh secrets-migrator \
 ### Optional Flags
 
 - `--verbose`: Enable verbose logging for detailed output
+- `--load`: Load both `source-pat` and `target-pat` from `GITHUB_TOKEN` environment variable (skips both PAT requirements)
 
 ### Example
 
@@ -183,6 +184,24 @@ gh secrets-migrator \
   --target-repo new-repo \
   --source-pat ghp_xxxxxxxxxxxxxxxxxxxx \
   --target-pat ghp_yyyyyyyyyyyyyyyyyyyyyy \
+  --verbose
+```
+
+### Using GITHUB_TOKEN with --load
+
+If you have `GITHUB_TOKEN` set in your environment (e.g., from `gh auth` or CI/CD), you can use the `--load` flag to automatically use it as both the source and target PATs:
+
+```bash
+# Set GITHUB_TOKEN first (or it's already set from gh CLI)
+export GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
+
+# Now you don't need --source-pat or --target-pat
+gh secrets-migrator \
+  --source-org my-org \
+  --source-repo old-repo \
+  --target-org my-org \
+  --target-repo new-repo \
+  --load \
   --verbose
 ```
 

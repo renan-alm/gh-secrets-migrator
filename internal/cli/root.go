@@ -4,6 +4,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 
@@ -19,6 +20,7 @@ var (
 	sourcePat  string
 	targetPat  string
 	verbose    bool
+	loadAuth   bool
 )
 
 // NewRootCommand creates the root cobra command.
@@ -43,13 +45,12 @@ All secrets are encrypted using the target repository's public key before migrat
 	cmd.PersistentFlags().StringVar(&targetRepo, "target-repo", "", "Target repository name (required)")
 	cmd.MarkPersistentFlagRequired("target-repo")
 
-	cmd.PersistentFlags().StringVar(&sourcePat, "source-pat", "", "Personal Access Token for source repository (required)")
-	cmd.MarkPersistentFlagRequired("source-pat")
-
-	cmd.PersistentFlags().StringVar(&targetPat, "target-pat", "", "Personal Access Token for target repository (required)")
-	cmd.MarkPersistentFlagRequired("target-pat")
+	cmd.PersistentFlags().StringVar(&sourcePat, "source-pat", "", "Personal Access Token for source repository (required unless --load is used)")
+	cmd.PersistentFlags().StringVar(&targetPat, "target-pat", "", "Personal Access Token for target repository (required unless --load is used)")
 
 	cmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "Enable verbose logging")
+
+	cmd.PersistentFlags().BoolVar(&loadAuth, "load", false, "Load both source-pat and target-pat from GITHUB_TOKEN environment variable")
 
 	return cmd
 }
@@ -57,13 +58,25 @@ All secrets are encrypted using the target repository's public key before migrat
 func runMigration(cmd *cobra.Command, args []string) error {
 	log := logger.New(verbose)
 
+	// Handle --load flag to use GITHUB_TOKEN for both source-pat and target-pat
+	sourcePatValue := sourcePat
+	targetPatValue := targetPat
+	if loadAuth {
+		token := os.Getenv("GITHUB_TOKEN")
+		if token == "" {
+			return fmt.Errorf("--load flag requires GITHUB_TOKEN environment variable to be set")
+		}
+		sourcePatValue = token
+		targetPatValue = token
+	}
+
 	config := &migrator.Config{
 		SourceOrg:  sourceOrg,
 		SourceRepo: sourceRepo,
 		TargetOrg:  targetOrg,
 		TargetRepo: targetRepo,
-		SourcePAT:  sourcePat,
-		TargetPAT:  targetPat,
+		SourcePAT:  sourcePatValue,
+		TargetPAT:  targetPatValue,
 		Verbose:    verbose,
 	}
 
