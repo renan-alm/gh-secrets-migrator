@@ -38,10 +38,9 @@ jobs:
         run: go mod verify
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v4
-        with:
-          version: v1.65.0
-          args: --timeout=5m
+        run: |
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+          golangci-lint run ./... --config=.golangci.yml --timeout=5m
 
       - name: Check go mod tidy
         run: |
