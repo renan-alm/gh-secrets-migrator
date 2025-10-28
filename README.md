@@ -103,6 +103,12 @@ cd gh-secrets-migrator
 make build
 ```
 
+The build command automatically embeds the current git commit hash as the version number. You can verify it by running:
+
+```bash
+./gh-secrets-migrator --help
+```
+
 **Install as `gh` extension manually:**
 
 ```bash
@@ -232,10 +238,14 @@ make install       # Build and install locally
 # Using Make (preferred)
 make build-all
 
-# Or manually for specific platforms
-GOOS=linux GOARCH=amd64 go build -o gh-secrets-migrator-linux-amd64 ./cmd/gh-secrets-migrator
-GOOS=darwin GOARCH=arm64 go build -o gh-secrets-migrator-darwin-arm64 ./cmd/gh-secrets-migrator
-GOOS=windows GOARCH=amd64 go build -o gh-secrets-migrator.exe ./cmd/gh-secrets-migrator
+# Or manually for specific platforms with version info
+# Get the current git commit hash
+COMMIT_HASH=$(git rev-parse --short HEAD)
+
+# Build for different platforms
+GOOS=linux GOARCH=amd64 go build -ldflags "-X main.Version=$COMMIT_HASH" -o gh-secrets-migrator-linux-amd64 ./cmd/gh-secrets-migrator
+GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.Version=$COMMIT_HASH" -o gh-secrets-migrator-darwin-arm64 ./cmd/gh-secrets-migrator
+GOOS=windows GOARCH=amd64 go build -ldflags "-X main.Version=$COMMIT_HASH" -o gh-secrets-migrator.exe ./cmd/gh-secrets-migrator
 ```
 
 ### Running Tests
