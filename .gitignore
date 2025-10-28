@@ -58,3 +58,4 @@ src-old/obj/
 gh-secrets-migrator
 
 
+src/Properties/launchSettings.json
