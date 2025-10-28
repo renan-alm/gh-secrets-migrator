@@ -51,10 +51,6 @@ func TestNewConfig(t *testing.T) {
 				TargetPAT:  "token2",
 			}
 
-			if cfg == nil {
-				t.Error("Config is nil")
-			}
-
 			// Validate required fields
 			hasErrors := cfg.SourceOrg == "" || cfg.SourceRepo == "" ||
 				cfg.TargetOrg == "" || cfg.TargetRepo == ""
@@ -179,7 +175,7 @@ func TestConfigWithLogger(t *testing.T) {
 		TargetPAT:  "token2",
 	}
 
-	if cfg == nil {
-		t.Error("Config is nil")
+	if cfg.SourceOrg != "source" {
+		t.Error("SourceOrg not set correctly")
 	}
 }

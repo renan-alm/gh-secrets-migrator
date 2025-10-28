@@ -34,16 +34,16 @@ All secrets are encrypted using the target repository's public key before migrat
 	}
 
 	cmd.PersistentFlags().StringVar(&sourceOrg, "source-org", "", "Source organization name (required)")
-	cmd.MarkPersistentFlagRequired("source-org")
+	_ = cmd.MarkPersistentFlagRequired("source-org")
 
 	cmd.PersistentFlags().StringVar(&sourceRepo, "source-repo", "", "Source repository name (required)")
-	cmd.MarkPersistentFlagRequired("source-repo")
+	_ = cmd.MarkPersistentFlagRequired("source-repo")
 
 	cmd.PersistentFlags().StringVar(&targetOrg, "target-org", "", "Target organization name (required)")
-	cmd.MarkPersistentFlagRequired("target-org")
+	_ = cmd.MarkPersistentFlagRequired("target-org")
 
 	cmd.PersistentFlags().StringVar(&targetRepo, "target-repo", "", "Target repository name (required)")
-	cmd.MarkPersistentFlagRequired("target-repo")
+	_ = cmd.MarkPersistentFlagRequired("target-repo")
 
 	cmd.PersistentFlags().StringVar(&sourcePat, "source-pat", "", "Personal Access Token for source repository (required unless --load is used)")
 	cmd.PersistentFlags().StringVar(&targetPat, "target-pat", "", "Personal Access Token for target repository (required unless --load is used)")
@@ -55,7 +55,7 @@ All secrets are encrypted using the target repository's public key before migrat
 	return cmd
 }
 
-func runMigration(cmd *cobra.Command, args []string) error {
+func runMigration(_ *cobra.Command, _ []string) error {
 	log := logger.New(verbose)
 
 	// Handle --load flag to use GITHUB_TOKEN for both source-pat and target-pat

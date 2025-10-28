@@ -36,7 +36,7 @@ func TestLoggerInfo(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		t.Run(tt.name, func(_ *testing.T) {
 			l := New(false)
 			// Should not panic
 			l.Info(tt.message)
@@ -57,7 +57,7 @@ func TestLoggerInfof(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		t.Run(tt.name, func(_ *testing.T) {
 			l := New(false)
 			// Should not panic
 			l.Infof(tt.format, tt.args...)
@@ -77,7 +77,7 @@ func TestLoggerDebug(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		t.Run(tt.name, func(_ *testing.T) {
 			l := New(tt.verbose)
 			// Should not panic
 			l.Debug(tt.message)
@@ -86,14 +86,14 @@ func TestLoggerDebug(t *testing.T) {
 }
 
 // TestLoggerDebugf tests formatted Debug logging
-func TestLoggerDebugf(t *testing.T) {
+func TestLoggerDebugf(_ *testing.T) {
 	l := New(true)
 	// Should not panic
 	l.Debugf("debug %s", "message")
 }
 
 // TestLoggerSuccess tests Success logging
-func TestLoggerSuccess(t *testing.T) {
+func TestLoggerSuccess(_ *testing.T) {
 	l := New(false)
 	// Should not panic
 	l.Success("operation succeeded")
@@ -110,7 +110,7 @@ func TestLoggerError(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		t.Run(tt.name, func(_ *testing.T) {
 			l := New(false)
 			// Should not panic
 			l.Errorf(tt.message)
@@ -133,7 +133,7 @@ func TestMultipleLoggers(t *testing.T) {
 }
 
 // TestLoggerSequence tests multiple log calls in sequence
-func TestLoggerSequence(t *testing.T) {
+func TestLoggerSequence(_ *testing.T) {
 	l := New(true)
 
 	l.Info("starting")
@@ -144,12 +144,12 @@ func TestLoggerSequence(t *testing.T) {
 
 // TestLoggerWithVerbose tests verbose flag behavior
 func TestLoggerWithVerbose(t *testing.T) {
-	t.Run("verbose enabled", func(t *testing.T) {
+	t.Run("verbose enabled", func(_ *testing.T) {
 		l := New(true)
 		l.Debug("debug enabled") // Should output
 	})
 
-	t.Run("verbose disabled", func(t *testing.T) {
+	t.Run("verbose disabled", func(_ *testing.T) {
 		l := New(false)
 		l.Debug("debug disabled") // Should not output
 	})

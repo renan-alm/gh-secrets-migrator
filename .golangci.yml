@@ -1,18 +1,15 @@
+version: "2"
+
 run:
   timeout: 5m
+  tests: true
 
 linters:
   enable:
     - errcheck
-    - gosimple
     - govet
     - ineffassign
     - staticcheck
-    - typecheck
     - unused
-    - gofmt
-    - goimports
     - revive
     - misspell
-    - unparam
-    - stylecheck

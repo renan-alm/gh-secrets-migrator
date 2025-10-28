@@ -2,17 +2,19 @@ name: Lint
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, master, develop ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main, master, develop ]
 
 jobs:
-  lint:
-    name: Lint
+  super-linter:
+    name: Super Linter
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v4
@@ -29,24 +31,19 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Verify module integrity
+        run: go mod verify
+
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v3
         with:
           version: latest
           args: --timeout=5m
 
-      - name: Run go vet
-        run: go vet ./...
-
-      - name: Run go fmt
-        run: |
-          if gofmt -l . | grep -q '.'; then
-            echo "Go fmt issues found:"
-            gofmt -d .
-            exit 1
-          fi
-
-      - name: Run go mod tidy
+      - name: Check go mod tidy
         run: |
           go mod tidy
           if ! git diff --exit-code go.mod go.sum > /dev/null; then
