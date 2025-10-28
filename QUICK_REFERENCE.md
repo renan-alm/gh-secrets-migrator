@@ -33,7 +33,7 @@ make install           # Build and install
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| test.yml | Push to main/develop, PRs | Run tests on Go 1.20 & 1.21 |
+| test.yml | Push to main/develop, PRs | Run tests on Go 1.23 & 1.24 |
 | lint.yml | Push to main/develop, PRs | Check code quality |
 | release.yml | Push tags (v*) | Build & release binaries |
 
@@ -122,7 +122,7 @@ Check: `make coverage-report`
 ## Workflows Summary
 
 ### 1. Test Workflow
-- ✅ Go 1.20 & 1.21
+- ✅ Go 1.23 & 1.24
 - ✅ Race detector
 - ✅ Coverage → Codecov
 - ✅ Caching

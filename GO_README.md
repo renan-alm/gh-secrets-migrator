@@ -22,7 +22,7 @@ This Go version offers several advantages over the C# implementation:
 
 ## Prerequisites
 
-- Go 1.21 or later (for building from source)
+- Go 1.24 or later (for building from source)
 - GitHub Personal Access Tokens (PATs) for both source and target repositories with appropriate permissions
 - Permissions to create branches, workflows, and secrets in the source repository
 

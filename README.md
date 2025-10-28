@@ -2,6 +2,11 @@
 
 A high-performance command-line tool written in Go to migrate GitHub repository secrets from one repository to another.
 
+[![Tests](https://github.com/renan-alm/gh-secrets-migrator/actions/workflows/test.yml/badge.svg)](https://github.com/renan-alm/gh-secrets-migrator/actions/workflows/test.yml)
+[![Lint](https://github.com/renan-alm/gh-secrets-migrator/actions/workflows/lint.yml/badge.svg)](https://github.com/renan-alm/gh-secrets-migrator/actions/workflows/lint.yml)
+[![CI](https://github.com/renan-alm/gh-secrets-migrator/actions/workflows/CI.yml/badge.svg)](https://github.com/renan-alm/gh-secrets-migrator/actions/workflows/CI.yml)
+[![Go 1.24](https://img.shields.io/badge/Go-1.24-blue.svg)](https://golang.org/)
+
 ## Features
 
 - Migrates all secrets from a source GitHub repository to a target repository
@@ -36,7 +41,7 @@ A high-performance command-line tool written in Go to migrate GitHub repository 
 
 ## Prerequisites
 
-- Go 1.21 or later (for building from source)
+- Go 1.24 or later (for building from source)
 - GitHub Personal Access Tokens (PATs) for both source and target repositories with appropriate permissions
 - Permissions to create branches, workflows, and secrets in the source repository
 
@@ -92,7 +97,7 @@ gh secrets-migrator \
 #### Option 1: Build from Source
 
 **Requirements:**
-- Go 1.21 or later ([Install Go](https://golang.org/dl/))
+- Go 1.24 or later ([Install Go](https://golang.org/dl/))
 - Git
 
 **Clone and build:**

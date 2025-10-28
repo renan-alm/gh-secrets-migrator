@@ -17,7 +17,7 @@ The CI/CD pipeline consists of three workflows:
 **Triggers**: Push to main/develop, Pull requests
 
 **What it does**:
-- Tests on Go 1.20 and 1.21
+- Tests on Go 1.23 and 1.24
 - Runs tests with race detector
 - Generates coverage reports
 - Uploads to Codecov
