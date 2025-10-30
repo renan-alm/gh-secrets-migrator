@@ -45,8 +45,8 @@ class GitHubClient:
             repository.get_git_ref(f"heads/{branch_name}").delete()
             self.log.debug(f"Deleted branch {branch_name}")
         except Exception as e:
-            # It's okay if branch doesn't exist
-            self.log.debug(f"Branch {branch_name} does not exist or could not be deleted: {e}")
+            # It's okay if branch doesn't exist - we'll create it fresh
+            self.log.debug(f"Branch {branch_name} will be created fresh")
 
     def list_repo_secrets(self, org: str, repo: str) -> List[str]:
         """List all secrets in the repository."""

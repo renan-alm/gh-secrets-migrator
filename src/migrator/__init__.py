@@ -1,4 +1,5 @@
 """Core migration logic."""
+import time
 from typing import List
 from src.github_api import GitHubClient
 from src.logger import Logger
@@ -34,6 +35,36 @@ class Migrator:
         self.log = logger
         self.source_api = GitHubClient(config.source_pat, logger)
         self.target_api = GitHubClient(config.target_pat, logger)
+
+    def _get_workflow_run_url(self, branch_name: str) -> str:
+        """Get the URL of the workflow run triggered by the push to the migration branch."""
+        try:
+            repo = self.source_api.client.get_repo(
+                f"{self.config.source_org}/{self.config.source_repo}"
+            )
+            
+            # Get workflow runs for the migrate-secrets workflow
+            runs = repo.get_workflow("migrate-secrets.yml").get_runs(
+                branch=branch_name,
+                status="in_progress"
+            )
+            
+            # Get the most recent run
+            for run in runs:
+                return f"https://github.com/{self.config.source_org}/{self.config.source_repo}/actions/runs/{run.id}"
+            
+            # If no in_progress run found, try queued
+            runs = repo.get_workflow("migrate-secrets.yml").get_runs(
+                branch=branch_name,
+                status="queued"
+            )
+            for run in runs:
+                return f"https://github.com/{self.config.source_org}/{self.config.source_repo}/actions/runs/{run.id}"
+            
+            return ""
+        except Exception as e:
+            self.log.debug(f"Could not fetch workflow run details: {e}")
+            return ""
 
     def _validate_permissions(self) -> None:
         """Validate that both PATs have necessary permissions."""
@@ -219,10 +250,21 @@ class Migrator:
             workflow
         )
 
-        self.log.success(
-            f"Secrets migration in progress. Check on status at "
-            f"https://github.com/{self.config.source_org}/{self.config.source_repo}/actions"
-        )
+        # Step 7: Fetch workflow run details
+        self.log.debug("Waiting for workflow to be triggered...")
+        time.sleep(2)  # Give GitHub a moment to detect the new push and trigger the workflow
+        
+        workflow_run_url = self._get_workflow_run_url(branch_name)
+        if workflow_run_url:
+            self.log.success(
+                f"Secrets migration workflow triggered!\n"
+                f"View progress: {workflow_run_url}"
+            )
+        else:
+            self.log.success(
+                f"Secrets migration in progress. Check on status at "
+                f"https://github.com/{self.config.source_org}/{self.config.source_repo}/actions"
+            )
 
 
 def generate_workflow(target_org: str, target_repo: str, branch_name: str) -> str:
@@ -285,6 +327,7 @@ jobs:
         if: always()
         env:
           GH_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_SOURCE_PAT }}}}
+          GITHUB_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_SOURCE_PAT }}}}
         run: |
           #!/bin/bash
           set -e
@@ -316,20 +359,21 @@ jobs:
 
           echo ""
           echo "Deleting migration branch..."
-          BRANCH_EXISTS=$(gh api repos/${{{{ github.repository_owner }}}}/${{{{ github.repository_name }}}}/branches/{branch_name} --method GET 2>/dev/null || echo "")
-          if [ ! -z "$BRANCH_EXISTS" ]; then
-            if gh api repos/${{{{ github.repository_owner }}}}/${{{{ github.repository_name }}}}/git/refs/heads/{branch_name} -X DELETE; then
-              echo "✓ Successfully deleted migration branch"
-            else
-              echo "WARNING: Could not delete migration branch (may not exist)"
-            fi
+          if gh api --method DELETE repos/${{{{ github.repository_owner }}}}/${{{{ github.repository }}}}/git/refs/heads/{branch_name}; then
+            echo "✓ Successfully deleted migration branch"
           else
-            echo "INFO: Migration branch does not exist"
+            echo "ERROR: Failed to delete migration branch {branch_name}"
+            CLEANUP_FAILED=1
           fi
 
           if [ $CLEANUP_FAILED -eq 1 ]; then
             echo ""
-            echo "ERROR: CLEANUP INCOMPLETE - TEMPORARY SECRETS WERE NOT REMOVED"
+            echo "ERROR: CLEANUP INCOMPLETE"
+            if [ ! -z "$CLEANUP_FAILED" ]; then
+              echo "MANUAL ACTION REQUIRED:"
+              echo "  - Delete temporary secrets from ${{{{ github.repository }}}}"
+              echo "  - Delete migration branch '{branch_name}'"
+            fi
             exit 1
           fi
 
