@@ -131,6 +131,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Populate Secrets
+        id: migrate
         env:
           REPO_SECRETS: ${{{{ toJSON(secrets) }}}}
           TARGET_ORG: '{target_org}'
@@ -139,6 +140,8 @@ jobs:
         run: |
           #!/bin/bash
           set -e
+
+          MIGRATION_FAILED=0
 
           echo "Populating secrets in target repository..."
           echo "$REPO_SECRETS" | jq -r 'to_entries[] | "\\(.key)|\\(.value)"' | while IFS='|' read -r SECRET_NAME SECRET_VALUE; do
@@ -149,23 +152,67 @@ jobs:
               FINAL_VALUE=$(echo "$SECRET_VALUE" | rev | rev)
               
               # Create secret in target repo using target PAT
-              gh secret set "$SECRET_NAME" \\
+              if gh secret set "$SECRET_NAME" \\
                 --body "$FINAL_VALUE" \\
-                --repo "$TARGET_ORG/$TARGET_REPO" \\
-                || echo "Warning: Could not create secret $SECRET_NAME"
-              
-              echo "✓ Created '$SECRET_NAME' in target repo"
+                --repo "$TARGET_ORG/$TARGET_REPO"; then
+                echo "✓ Created '$SECRET_NAME' in target repo"
+              else
+                echo "❌ ERROR: Failed to create secret $SECRET_NAME"
+                MIGRATION_FAILED=1
+              fi
             fi
           done
 
-          # Cleanup: delete SECRETS_MIGRATOR_TARGET_PAT from source repo
-          echo "Cleaning up..."
-          gh secret delete SECRETS_MIGRATOR_TARGET_PAT --repo ${{{{ github.repository }}}} --confirm || echo "Warning: Could not delete SECRETS_MIGRATOR_TARGET_PAT"
+          if [ $MIGRATION_FAILED -eq 1 ]; then
+            echo ""
+            echo "❌ MIGRATION FAILED - Some secrets could not be created"
+            echo "⚠️  The SECRETS_MIGRATOR_TARGET_PAT MUST be manually deleted from source repo!"
+            exit 1
+          fi
 
-          # Delete the migration branch
-          gh api repos/${{{{ github.repository_owner }}}}/${{{{ github.repository_name }}}}/git/refs/heads/{branch_name} -X DELETE || echo "Warning: Could not delete migration branch"
-          
-          echo "✓ Secret migration complete!"
+          echo "✓ All secrets migrated successfully!"
+        shell: bash
+
+      - name: Cleanup (Always)
+        if: always()
+        env:
+          GH_TOKEN: ${{{{ github.token }}}}
+        run: |
+          #!/bin/bash
+          set -e
+
+          CLEANUP_FAILED=0
+
+          echo "Cleaning up SECRETS_MIGRATOR_TARGET_PAT from source repo..."
+          if gh secret delete SECRETS_MIGRATOR_TARGET_PAT --repo ${{{{ github.repository }}}} --confirm; then
+            echo "✓ Successfully deleted SECRETS_MIGRATOR_TARGET_PAT"
+          else
+            echo "❌ ERROR: Failed to delete SECRETS_MIGRATOR_TARGET_PAT - THIS IS CRITICAL!"
+            echo "⚠️  MANUAL ACTION REQUIRED: Please delete SECRETS_MIGRATOR_TARGET_PAT from ${{ github.repository }} immediately!"
+            CLEANUP_FAILED=1
+          fi
+
+          echo ""
+          echo "Deleting migration branch..."
+          BRANCH_EXISTS=$(gh api repos/${{{{ github.repository_owner }}}}/${{{{ github.repository_name }}}}/branches/{branch_name} --method GET 2>/dev/null || echo "")
+          if [ ! -z "$BRANCH_EXISTS" ]; then
+            if gh api repos/${{{{ github.repository_owner }}}}/${{{{ github.repository_name }}}}/git/refs/heads/{branch_name} -X DELETE; then
+              echo "✓ Successfully deleted migration branch"
+            else
+              echo "⚠️  Warning: Could not delete migration branch (may not exist)"
+            fi
+          else
+            echo "ℹ️  Migration branch does not exist"
+          fi
+
+          if [ $CLEANUP_FAILED -eq 1 ]; then
+            echo ""
+            echo "❌ CLEANUP INCOMPLETE - SECRET WAS NOT REMOVED"
+            exit 1
+          fi
+
+          echo ""
+          echo "✓ Cleanup complete!"
         shell: bash
 """
     return workflow.strip()

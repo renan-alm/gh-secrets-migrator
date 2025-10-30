@@ -121,12 +121,17 @@ make clean      # Clean build artifacts
 3. Create `SECRETS_MIGRATOR_TARGET_PAT` in source repo (encrypted)
 4. Create `migrate-secrets` branch
 5. Push workflow file to branch
-6. Workflow runs:
-   - Creates all secrets in target repo
-   - Cleans up temporary secret
-   - Deletes migration branch
+6. Workflow runs with **strict error handling**:
+   - **Step 1 (Populate Secrets)**: Creates all secrets in target repo
+     - Fails immediately if ANY secret creation fails
+     - Reports error and requires manual cleanup of SECRETS_MIGRATOR_TARGET_PAT
+   - **Step 2 (Cleanup - Always)**: Runs even if Step 1 fails
+     - **CRITICAL**: Attempts to delete SECRETS_MIGRATOR_TARGET_PAT from source repo
+     - **Fails the job if secret is not deleted** (exits with code 1)
+     - This ensures the job is marked as failed if cleanup doesn't succeed
+     - Alerts user if manual intervention is required
 
-## Next Steps
+**⚠️ CRITICAL SECURITY**: The `SECRETS_MIGRATOR_TARGET_PAT` secret is guaranteed to be removed from the source repo, or the job will fail with a clear error message requiring manual deletion. There is no scenario where this temporary token is left silently.## Next Steps
 
 1. ✅ Test with real repositories
 2. ✅ Verify workflow execution
