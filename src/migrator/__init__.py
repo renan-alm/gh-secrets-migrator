@@ -359,7 +359,7 @@ jobs:
 
           echo ""
           echo "Deleting migration branch..."
-          if gh api --method DELETE repos/${{{{ github.repository_owner }}}}/${{{{ github.repository }}}}/git/refs/heads/{branch_name}; then
+          if gh api --method DELETE repos/${{{{ github.repository }}}}/git/refs/heads/{branch_name}; then
             echo "✓ Successfully deleted migration branch"
           else
             echo "ERROR: Failed to delete migration branch {branch_name}"
