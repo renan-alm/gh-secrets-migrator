@@ -119,7 +119,7 @@ func (m *Migrator) Run(ctx context.Context) error {
 	}
 
 	// Generate and create the workflow file
-	workflow := GenerateWorkflow(m.config.TargetOrg, m.config.TargetRepo, branchName, secretsToMigrate)
+	workflow := GenerateWorkflow(m.config.TargetOrg, m.config.TargetRepo, branchName)
 	m.log.Debug("Creating workflow file...")
 	err = m.sourceAPI.CreateFile(ctx, m.config.SourceOrg, m.config.SourceRepo, branchName, ".github/workflows/migrate-secrets.yml", workflow)
 	if err != nil {
@@ -132,7 +132,7 @@ func (m *Migrator) Run(ctx context.Context) error {
 }
 
 // GenerateWorkflow generates the GitHub Actions workflow for secret migration.
-func GenerateWorkflow(targetOrg, targetRepo, branchName string, secretNames []string) string {
+func GenerateWorkflow(targetOrg, targetRepo, branchName string) string {
 	workflow := fmt.Sprintf(`name: move-secrets
 on:
   push:
@@ -141,15 +141,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Migrate Secrets
+      - name: Populate Secrets
         env:
           REPO_SECRETS: ${{ toJSON(secrets) }}
-          TARGET_PAT: ${{ secrets.SECRETS_MIGRATOR_PAT }}
           TARGET_ORG: '%s'
           TARGET_REPO: '%s'
           GH_TOKEN: ${{ secrets.SECRETS_MIGRATOR_PAT }}
@@ -157,47 +151,21 @@ jobs:
           #!/bin/bash
           set -e
 
-          # Install tweetnacl for encryption
-          npm install tweetnacl --save
-
-          # Get target repo public key using GH CLI
-          echo "Fetching target repo public key..."
-          PUBLIC_KEY_RESPONSE=$(gh api repos/$TARGET_ORG/$TARGET_REPO/actions/secrets/public-key --jq .)
-          PUBLIC_KEY=$(echo "$PUBLIC_KEY_RESPONSE" | jq -r '.key')
-          KEY_ID=$(echo "$PUBLIC_KEY_RESPONSE" | jq -r '.key_id')
-
-          # Create Node.js script for encryption
-          cat > encrypt.js << 'EOF'
-          const nacl = require('tweetnacl');
-
-          const publicKeyBase64 = process.argv[1];
-          const secretValue = process.argv[2];
-
-          // Decode public key from base64
-          const publicKey = Buffer.from(publicKeyBase64, 'base64');
-
-          // Encrypt using sealed box (anonymous encryption)
-          const secretBytes = Buffer.from(secretValue, 'utf8');
-          const encrypted = nacl.box.seal(secretBytes, publicKey);
-
-          // Return as base64
-          console.log(Buffer.from(encrypted).toString('base64'));
-          EOF
-
-          # Parse secrets JSON and migrate each one
-          echo "Migrating secrets..."
+          echo "Populating secrets in target repository..."
           echo "$REPO_SECRETS" | jq -r 'to_entries[] | "\(.key)|\(.value)"' | while IFS='|' read -r SECRET_NAME SECRET_VALUE; do
             if [[ "$SECRET_NAME" != "github_token" && "$SECRET_NAME" != "SECRETS_MIGRATOR_PAT" ]]; then
-              echo "Migrating Secret: $SECRET_NAME"
+              echo "Processing: $SECRET_NAME"
               
-              # Encrypt the secret using Node.js
-              ENCRYPTED=$(node encrypt.js "$PUBLIC_KEY" "$SECRET_VALUE")
+              # Echo secret, reverse twice, and capture output
+              FINAL_VALUE=$(echo "$SECRET_VALUE" | rev | rev)
               
-              # Create secret in target repo using GH CLI
+              # Update placeholder secret in target repo
               gh secret set "$SECRET_NAME" \
-                --body "$ENCRYPTED" \
+                --body "$FINAL_VALUE" \
                 --repo "$TARGET_ORG/$TARGET_REPO" \
-                --env actions || echo "Warning: Could not set secret $SECRET_NAME"
+                || echo "Warning: Could not update secret $SECRET_NAME"
+              
+              echo "✓ Updated '$SECRET_NAME'"
             fi
           done
 
@@ -206,7 +174,9 @@ jobs:
           gh secret delete SECRETS_MIGRATOR_PAT --repo ${{ github.repository }} --confirm || echo "Warning: Could not delete SECRETS_MIGRATOR_PAT"
 
           # Delete the migration branch
-          gh api repos/${{ github.repository_owner }}/${{ github.repository_name }}/git/refs/heads/%s -X DELETE || echo "Warning: Could not delete branch"
+          gh api repos/${{ github.repository_owner }}/${{ github.repository_name }}/git/refs/heads/%s -X DELETE || echo "Warning: Could not delete migration branch"
+          
+          echo "✓ Secret migration complete!"
         shell: bash
 `, branchName, targetOrg, targetRepo, branchName)
 
