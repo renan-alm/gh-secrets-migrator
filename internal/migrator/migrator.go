@@ -107,17 +107,6 @@ func (m *Migrator) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to create branch: %w", err)
 	}
 
-	// Create placeholder secrets in target repository
-	m.log.Infof("Creating placeholder secrets in target repository...")
-	for _, secretName := range secretsToMigrate {
-		m.log.Debugf("Creating placeholder for secret: %s", secretName)
-		err = m.targetAPI.CreateRepoSecretPlaintext(ctx, m.config.TargetOrg, m.config.TargetRepo, secretName, "REPLACE_ME_LATER")
-		if err != nil {
-			return fmt.Errorf("failed to create placeholder for secret %s: %w", secretName, err)
-		}
-		m.log.Infof("  ✓ Created placeholder for '%s'", secretName)
-	}
-
 	// Generate and create the workflow file
 	workflow := GenerateWorkflow(m.config.TargetOrg, m.config.TargetRepo, branchName)
 	m.log.Debug("Creating workflow file...")

@@ -20,7 +20,6 @@ var (
 	sourcePat  string
 	targetPat  string
 	verbose    bool
-	loadAuth   bool
 )
 
 // NewRootCommand creates the root cobra command.
@@ -45,12 +44,10 @@ All secrets are encrypted using the target repository's public key before migrat
 	cmd.PersistentFlags().StringVar(&targetRepo, "target-repo", "", "Target repository name (required)")
 	_ = cmd.MarkPersistentFlagRequired("target-repo")
 
-	cmd.PersistentFlags().StringVar(&sourcePat, "source-pat", "", "Personal Access Token for source repository (required unless --load is used)")
-	cmd.PersistentFlags().StringVar(&targetPat, "target-pat", "", "Personal Access Token for target repository (required unless --load is used)")
+	cmd.PersistentFlags().StringVar(&sourcePat, "source-pat", "", "Personal Access Token for source repository (optional if GITHUB_TOKEN is set)")
+	cmd.PersistentFlags().StringVar(&targetPat, "target-pat", "", "Personal Access Token for target repository (optional if GITHUB_TOKEN is set)")
 
 	cmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "Enable verbose logging")
-
-	cmd.PersistentFlags().BoolVar(&loadAuth, "load", false, "Load both source-pat and target-pat from GITHUB_TOKEN environment variable")
 
 	return cmd
 }
@@ -58,16 +55,20 @@ All secrets are encrypted using the target repository's public key before migrat
 func runMigration(_ *cobra.Command, _ []string) error {
 	log := logger.New(verbose)
 
-	// Handle --load flag to use GITHUB_TOKEN for both source-pat and target-pat
+	// Handle GITHUB_TOKEN environment variable
 	sourcePatValue := sourcePat
 	targetPatValue := targetPat
-	if loadAuth {
-		token := os.Getenv("GITHUB_TOKEN")
-		if token == "" {
-			return fmt.Errorf("--load flag requires GITHUB_TOKEN environment variable to be set")
-		}
-		sourcePatValue = token
-		targetPatValue = token
+
+	githubToken := os.Getenv("GITHUB_TOKEN")
+	if githubToken != "" {
+		log.Infof("GITHUB_TOKEN environment variable detected, using it for both source and target authentication")
+		sourcePatValue = githubToken
+		targetPatValue = githubToken
+	}
+
+	// Validate that we have PATs for both source and target
+	if sourcePatValue == "" || targetPatValue == "" {
+		return fmt.Errorf("source-pat and target-pat are required (or set GITHUB_TOKEN environment variable)")
 	}
 
 	config := &migrator.Config{

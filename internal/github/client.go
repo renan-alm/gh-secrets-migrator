@@ -62,23 +62,6 @@ func (c *Client) CreateBranch(ctx context.Context, org, repo, branchName, sha st
 	return nil
 }
 
-// CreateRepoSecretPlaintext creates a secret in the repository (placeholder value).
-func (c *Client) CreateRepoSecretPlaintext(ctx context.Context, org, repo, secretName, secretValue string) error {
-	c.log.Debugf("Creating placeholder secret %s in %s/%s", secretName, org, repo)
-
-	secret := &github.EncryptedSecret{
-		Name:           secretName,
-		EncryptedValue: base64.StdEncoding.EncodeToString([]byte(secretValue)),
-		KeyID:          "",
-	}
-
-	_, err := c.client.Actions.CreateOrUpdateRepoSecret(ctx, org, repo, secret)
-	if err != nil {
-		return fmt.Errorf("failed to create placeholder secret: %w", err)
-	}
-	return nil
-}
-
 // ListRepoSecrets retrieves all secrets in the repository.
 func (c *Client) ListRepoSecrets(ctx context.Context, org, repo string) ([]string, error) {
 	opts := &github.ListOptions{PerPage: 100}
