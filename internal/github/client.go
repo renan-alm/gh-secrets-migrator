@@ -81,8 +81,12 @@ func (c *Client) GetRepoPublicKey(ctx context.Context, org, repo string) ([]byte
 
 // CreateRepoSecret creates a secret in the repository using the public key.
 func (c *Client) CreateRepoSecret(ctx context.Context, org, repo string, publicKey []byte, publicKeyID, secretName, secretValue string) error {
-	// Convert public key to array for encryption
+	// The public key from GitHub is 32 bytes (Ed25519 format)
+	// nacl/box.SealAnonymous requires a 32-byte Curve25519 public key
 	var publicKeyArray [32]byte
+	if len(publicKey) != 32 {
+		return fmt.Errorf("invalid public key length: expected 32 bytes, got %d", len(publicKey))
+	}
 	copy(publicKeyArray[:], publicKey)
 
 	// Encrypt the secret using libsodium's sealed box
@@ -209,6 +213,11 @@ func (c *Client) DeleteRef(ctx context.Context, org, repo, ref string) error {
 		return fmt.Errorf("failed to delete ref: %w", err)
 	}
 	return nil
+}
+
+// DeleteBranch deletes a branch from the repository.
+func (c *Client) DeleteBranch(ctx context.Context, org, repo, branchName string) error {
+	return c.DeleteRef(ctx, org, repo, fmt.Sprintf("heads/%s", branchName))
 }
 
 // DeleteSecret deletes a secret from the repository.

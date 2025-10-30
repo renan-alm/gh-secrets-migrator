@@ -79,6 +79,16 @@ func (m *Migrator) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to get commit SHA: %w", err)
 	}
 
+	// Delete the migration branch if it already exists (cleanup from previous run)
+	m.log.Debugf("Checking if branch %s exists...", branchName)
+	err = m.sourceAPI.DeleteBranch(ctx, m.config.SourceOrg, m.config.SourceRepo, branchName)
+	if err != nil {
+		// It's okay if the branch doesn't exist, only log at debug level
+		m.log.Debugf("Branch %s does not exist or could not be deleted (this is normal): %v", branchName, err)
+	} else {
+		m.log.Debugf("Deleted existing branch %s", branchName)
+	}
+
 	// Create the migration branch
 	m.log.Debugf("Creating branch %s...", branchName)
 	err = m.sourceAPI.CreateBranch(ctx, m.config.SourceOrg, m.config.SourceRepo, branchName, masterCommitSha)
@@ -107,56 +117,76 @@ on:
     branches: [ "%s" ]
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     steps:
-      - name: Install Crypto Package
-        run: |
-          Install-Package -Name Sodium.Core -ProviderName NuGet -Scope CurrentUser -RequiredVersion 1.3.0 -Destination . -Force
-        shell: pwsh
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Migrate Secrets
-        run: |
-          $sodiumPath = Resolve-Path ".\Sodium.Core.1.3.0\lib\netstandard2.1\Sodium.Core.dll"
-          [System.Reflection.Assembly]::LoadFrom($sodiumPath)
-
-          $targetPat = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$($env:TARGET_PAT)"))
-          $publicKeyResponse = Invoke-RestMethod -Uri "https://api.github.com/repos/$env:TARGET_ORG/$env:TARGET_REPO/actions/secrets/public-key" -Method "GET" -Headers @{ Authorization = "Basic $targetPat" }
-          $publicKey = [Convert]::FromBase64String($publicKeyResponse.key)
-          $publicKeyId = $publicKeyResponse.key_id
-              
-          $secrets = $env:REPO_SECRETS | ConvertFrom-Json
-          $secrets | Get-Member -MemberType NoteProperty | ForEach-Object {
-            $secretName = $_.Name
-            $secretValue = $secrets."$secretName"
-     
-            if ($secretName -ne "github_token" -and $secretName -ne "SECRETS_MIGRATOR_PAT") {
-              Write-Output "Migrating Secret: $secretName"
-              $secretBytes = [Text.Encoding]::UTF8.GetBytes($secretValue)
-              $sealedPublicKeyBox = [Sodium.SealedPublicKeyBox]::Create($secretBytes, $publicKey)
-              $encryptedSecret = [Convert]::ToBase64String($sealedPublicKeyBox)
-                 
-              $Params = @{
-                Uri = "https://api.github.com/repos/$env:TARGET_ORG/$env:TARGET_REPO/actions/secrets/$secretName"
-                Headers = @{
-                  Authorization = "Basic $targetPat"
-                }
-                Method = "PUT"
-                Body = "{ \"encrypted_value\": \"$encryptedSecret\", \"key_id\": \"$publicKeyId\" }"
-              }
-
-              $createSecretResponse = Invoke-RestMethod @Params
-            }
-          }
-
-          Write-Output "Cleaning up..."
-          Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/git/${{ github.ref }}" -Method "DELETE" -Headers @{ Authorization = "Basic $targetPat" }
-          Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/actions/secrets/SECRETS_MIGRATOR_PAT" -Method "DELETE" -Headers @{ Authorization = "Basic $targetPat" }
         env:
           REPO_SECRETS: ${{ toJSON(secrets) }}
           TARGET_PAT: ${{ secrets.SECRETS_MIGRATOR_PAT }}
           TARGET_ORG: '%s'
           TARGET_REPO: '%s'
-        shell: pwsh
-`, branchName, targetOrg, targetRepo)
+          GH_TOKEN: ${{ secrets.SECRETS_MIGRATOR_PAT }}
+        run: |
+          #!/bin/bash
+          set -e
+
+          # Install tweetnacl for encryption
+          npm install tweetnacl --save
+
+          # Get target repo public key using GH CLI
+          echo "Fetching target repo public key..."
+          PUBLIC_KEY_RESPONSE=$(gh api repos/$TARGET_ORG/$TARGET_REPO/actions/secrets/public-key --jq .)
+          PUBLIC_KEY=$(echo "$PUBLIC_KEY_RESPONSE" | jq -r '.key')
+          KEY_ID=$(echo "$PUBLIC_KEY_RESPONSE" | jq -r '.key_id')
+
+          # Create Node.js script for encryption
+          cat > encrypt.js << 'EOF'
+          const nacl = require('tweetnacl');
+
+          const publicKeyBase64 = process.argv[1];
+          const secretValue = process.argv[2];
+
+          // Decode public key from base64
+          const publicKey = Buffer.from(publicKeyBase64, 'base64');
+
+          // Encrypt using sealed box (anonymous encryption)
+          const secretBytes = Buffer.from(secretValue, 'utf8');
+          const encrypted = nacl.box.seal(secretBytes, publicKey);
+
+          // Return as base64
+          console.log(Buffer.from(encrypted).toString('base64'));
+          EOF
+
+          # Parse secrets JSON and migrate each one
+          echo "Migrating secrets..."
+          echo "$REPO_SECRETS" | jq -r 'to_entries[] | "\(.key)|\(.value)"' | while IFS='|' read -r SECRET_NAME SECRET_VALUE; do
+            if [[ "$SECRET_NAME" != "github_token" && "$SECRET_NAME" != "SECRETS_MIGRATOR_PAT" ]]; then
+              echo "Migrating Secret: $SECRET_NAME"
+              
+              # Encrypt the secret using Node.js
+              ENCRYPTED=$(node encrypt.js "$PUBLIC_KEY" "$SECRET_VALUE")
+              
+              # Create secret in target repo using GH CLI
+              gh secret set "$SECRET_NAME" \
+                --body "$ENCRYPTED" \
+                --repo "$TARGET_ORG/$TARGET_REPO" \
+                --env actions || echo "Warning: Could not set secret $SECRET_NAME"
+            fi
+          done
+
+          # Cleanup: delete SECRETS_MIGRATOR_PAT from source repo
+          echo "Cleaning up..."
+          gh secret delete SECRETS_MIGRATOR_PAT --repo ${{ github.repository }} --confirm || echo "Warning: Could not delete SECRETS_MIGRATOR_PAT"
+
+          # Delete the migration branch
+          gh api repos/${{ github.repository_owner }}/${{ github.repository_name }}/git/refs/heads/%s -X DELETE || echo "Warning: Could not delete branch"
+        shell: bash
+`, branchName, targetOrg, targetRepo, branchName)
 
 	return strings.TrimSpace(workflow)
 }
