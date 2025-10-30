@@ -35,6 +35,46 @@ class Migrator:
         self.source_api = GitHubClient(config.source_pat, logger)
         self.target_api = GitHubClient(config.target_pat, logger)
 
+    def _validate_permissions(self) -> None:
+        """Validate that both PATs have necessary permissions."""
+        try:
+            # Check source PAT permissions (needs repo + secret management)
+            self.log.debug("Checking source PAT permissions...")
+            source_user = self.source_api.client.get_user()
+            source_repo = source_user.get_repo(self.config.source_repo)
+            self.log.debug(f"✓ Source PAT has access to {self.config.source_org}/{self.config.source_repo}")
+            
+            # Try to list secrets to verify permission
+            try:
+                secrets = source_repo.get_secrets()
+                _ = list(secrets)  # Force evaluation
+                self.log.debug("✓ Source PAT has permission to manage secrets in source repo")
+            except Exception as e:
+                raise RuntimeError(f"Source PAT cannot manage secrets: {e}")
+
+            # Check target PAT permissions (needs repo + secret management)
+            self.log.debug("Checking target PAT permissions...")
+            target_user = self.target_api.client.get_user()
+            target_repo = target_user.get_repo(self.config.target_repo)
+            self.log.debug(f"✓ Target PAT has access to {self.config.target_org}/{self.config.target_repo}")
+            
+            # Try to list secrets to verify permission
+            try:
+                secrets = target_repo.get_secrets()
+                _ = list(secrets)  # Force evaluation
+                self.log.debug("✓ Target PAT has permission to manage secrets in target repo")
+            except Exception as e:
+                raise RuntimeError(f"Target PAT cannot manage secrets: {e}")
+
+            self.log.success("All PAT permissions validated!")
+
+        except Exception as e:
+            self.log.error(f"PAT validation failed: {e}")
+            raise RuntimeError(
+                f"Invalid PAT credentials or insufficient permissions: {e}\n"
+                f"Ensure both PATs have 'repo' and 'admin:repo_hook' scopes."
+            )
+
     def run(self) -> None:
         """Execute the migration process."""
         self.log.info("Migrating Secrets...")
@@ -42,6 +82,10 @@ class Migrator:
         self.log.info(f"SOURCE REPO: {self.config.source_repo}")
         self.log.info(f"TARGET ORG: {self.config.target_org}")
         self.log.info(f"TARGET REPO: {self.config.target_repo}")
+
+        # Validate PAT permissions
+        self.log.info("Validating PAT permissions...")
+        self._validate_permissions()
 
         branch_name = "migrate-secrets"
 
