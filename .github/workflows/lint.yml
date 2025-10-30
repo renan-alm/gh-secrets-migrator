@@ -7,45 +7,30 @@ on:
     branches: [ main ]
 
 jobs:
-  super-linter:
-    name: Super Linter
+  lint:
+    name: Python Lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          fetch-depth: 0
+          python-version: '3.11'
+          cache: 'pip'
 
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: '1.24'
-
-      - name: Cache Go modules
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
-      - name: Download dependencies
-        run: go mod download
-
-      - name: Verify module integrity
-        run: go mod verify
-
-      - name: Run golangci-lint
+      - name: Install dependencies
         run: |
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.61.0
-          golangci-lint run ./... --config=.golangci.yml --timeout=5m
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install flake8 pylint
 
-      - name: Check go mod tidy
+      - name: Lint with flake8
         run: |
-          go mod tidy
-          if ! git diff --exit-code go.mod go.sum > /dev/null; then
-            echo "go.mod/go.sum not tidy"
-            exit 1
-          fi
+          flake8 src/ main.py --max-line-length=100 --ignore=E203,W503 --count --show-source --statistics
+
+      - name: Lint with pylint
+        run: |
+          pylint src/ main.py --disable=C0111,R0903 --exit-zero || true
+

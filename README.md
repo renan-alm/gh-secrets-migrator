@@ -1,395 +1,170 @@
-# GitHub Secrets Migrator
+# GitHub Secrets Migrator (Python)
 
-A high-performance command-line tool written in Go to migrate GitHub repository secrets from one repository to another.
-
-[![Tests](https://github.com/renan-alm/gh-secrets-migrator/actions/workflows/test.yml/badge.svg)](https://github.com/renan-alm/gh-secrets-migrator/actions/workflows/test.yml)
-[![Lint](https://github.com/renan-alm/gh-secrets-migrator/actions/workflows/lint.yml/badge.svg)](https://github.com/renan-alm/gh-secrets-migrator/actions/workflows/lint.yml)
-[![CI](https://github.com/renan-alm/gh-secrets-migrator/actions/workflows/CI.yml/badge.svg)](https://github.com/renan-alm/gh-secrets-migrator/actions/workflows/CI.yml)
-[![Go 1.24](https://img.shields.io/badge/Go-1.24-blue.svg)](https://golang.org/)
+A tool to migrate GitHub repository secrets from a source repository to a target repository.
 
 ## Features
 
-- Migrates all secrets from a source GitHub repository to a target repository
-- Securely encrypts secrets using the target repository's public key
-- Automatically generates and commits a GitHub Actions workflow
-- Workflow handles all encryption and migration via PowerShell
-- Supports verbose logging for troubleshooting
-- Cross-platform compilation support
-
-## Project Structure
-
-```text
-.
-├── cmd/
-│   └── gh-secrets-migrator/
-│       └── main.go              # Application entry point
-├── internal/
-│   ├── cli/
-│   │   └── root.go              # Cobra CLI command setup
-│   ├── github/
-│   │   └── client.go            # GitHub API client
-│   ├── logger/
-│   │   └── logger.go            # Logging utilities
-│   └── migrator/
-│       └── migrator.go          # Core migration logic
-├── go.mod                        # Go module definition
-├── go.sum                        # Go module checksums
-├── Makefile                      # Build and development tasks
-├── .goreleaser.yml              # Release automation configuration
-└── README.md                     # This file
-```
-
-## Prerequisites
-
-- Go 1.24 or later (for building from source)
-- GitHub Personal Access Tokens (PATs) for both source and target repositories with appropriate permissions
-- Permissions to create branches, workflows, and secrets in the source repository
+- ✨ Migrates secrets from one GitHub repository to another
+- 🔐 Automatically encrypts secrets using GitHub's public key
+- 🤖 Uses GitHub Actions workflow for automated migration
+- 🔄 Supports both source and target PAT or GITHUB_TOKEN environment variable
+- 📝 Comprehensive logging with verbose mode
 
 ## Installation
 
-### ⭐ Recommended: GitHub CLI Extension
+### Prerequisites
 
-The easiest way to use `gh-secrets-migrator` is as a `gh` CLI extension. This integrates seamlessly with your GitHub CLI workflow.
+- Python 3.8+
+- GitHub Personal Access Tokens (PAT) with repo and workflow scopes
 
-**Prerequisites:**
-- `gh` CLI installed ([Install gh CLI](https://cli.github.com/))
-
-**Install the extension:**
+### Setup
 
 ```bash
-gh extension install ralmeida/gh-secrets-migrator
-```
-
-**Verify installation:**
-
-```bash
-gh secrets-migrator --help
-```
-
-**Usage:**
-
-```bash
-gh secrets-migrator \
-  --source-org SOURCE_ORG \
-  --source-repo SOURCE_REPO \
-  --target-org TARGET_ORG \
-  --target-repo TARGET_REPO \
-  --source-pat SOURCE_PAT \
-  --target-pat TARGET_PAT \
-  [--verbose]
-```
-
-**Example:**
-
-```bash
-gh secrets-migrator \
-  --source-org my-org \
-  --source-repo old-repo \
-  --target-org my-org \
-  --target-repo new-repo \
-  --source-pat ghp_xxxxxxxxxxxxxxxxxxxx \
-  --target-pat ghp_yyyyyyyyyyyyyyyyyyyyyy \
-  --verbose
-```
-
-### Alternative Installation Methods
-
-#### Option 1: Build from Source
-
-**Requirements:**
-- Go 1.24 or later ([Install Go](https://golang.org/dl/))
-- Git
-
-**Clone and build:**
-
-```bash
-git clone https://github.com/renan-alm/gh-secrets-migrator.git
+# Clone the repository
+git clone <repo-url>
 cd gh-secrets-migrator
-make build
-```
 
-The build command automatically embeds the current git commit hash as the version number. You can verify it by running:
+# Install dependencies
+pip install -r requirements.txt
 
-```bash
-./gh-secrets-migrator --help
-```
-
-**Install as `gh` extension manually:**
-
-```bash
-mkdir -p ~/.local/share/gh/extensions/gh-secrets-migrator
-cp gh-secrets-migrator ~/.local/share/gh/extensions/gh-secrets-migrator/gh-secrets-migrator
-gh secrets-migrator --help
-```
-
-#### Option 2: Download Pre-built Binary
-
-Pre-built binaries are available in the [releases section](https://github.com/renan-alm/gh-secrets-migrator/releases).
-
-**macOS (ARM64):**
-
-```bash
-wget https://github.com/renan-alm/gh-secrets-migrator/releases/download/v1.0.0/gh-secrets-migrator_1.0.0_darwin_arm64
-chmod +x gh-secrets-migrator_1.0.0_darwin_arm64
-sudo mv gh-secrets-migrator_1.0.0_darwin_arm64 /usr/local/bin/gh-secrets-migrator
-```
-
-**Linux (AMD64):**
-
-```bash
-wget https://github.com/renan-alm/gh-secrets-migrator/releases/download/v1.0.0/gh-secrets-migrator_1.0.0_linux_amd64
-chmod +x gh-secrets-migrator_1.0.0_linux_amd64
-sudo mv gh-secrets-migrator_1.0.0_linux_amd64 /usr/local/bin/gh-secrets-migrator
-```
-
-**Windows (PowerShell):**
-
-```powershell
-Invoke-WebRequest -Uri "https://github.com/renan-alm/gh-secrets-migrator/releases/download/v1.0.0/gh-secrets-migrator_1.0.0_windows_amd64.exe" -OutFile gh-secrets-migrator.exe
-.\gh-secrets-migrator.exe --help
-```
-
-#### Option 3: Install with Go
-
-```bash
-go install github.com/renan-alm/gh-secrets-migrator/cmd/gh-secrets-migrator@latest
-gh-secrets-migrator --help
+# Or with dev dependencies
+make dev
 ```
 
 ## Usage
 
-The recommended way to use this tool is as a `gh` CLI extension:
+### Basic Usage
 
 ```bash
-gh secrets-migrator \
-  --source-org SOURCE_ORG \
-  --source-repo SOURCE_REPO \
-  --target-org TARGET_ORG \
-  --target-repo TARGET_REPO \
-  --source-pat SOURCE_PAT \
-  --target-pat TARGET_PAT \
-  [--verbose]
+python main.py \
+  --source-org <source-org> \
+  --source-repo <source-repo> \
+  --target-org <target-org> \
+  --target-repo <target-repo> \
+  --source-pat <source-pat> \
+  --target-pat <target-pat>
 ```
 
-### Required Flags
-
-- `--source-org`: The organization containing the source repository
-- `--source-repo`: The source repository name
-- `--target-org`: The organization containing the target repository
-- `--target-repo`: The target repository name
-- `--source-pat`: Personal Access Token for the source repository
-- `--target-pat`: Personal Access Token for the target repository
-
-### Optional Flags
-
-- `--verbose`: Enable verbose logging for detailed output
-- `--load`: Load both `source-pat` and `target-pat` from `GITHUB_TOKEN` environment variable (skips both PAT requirements)
-
-### Example
+### Using GITHUB_TOKEN Environment Variable
 
 ```bash
-gh secrets-migrator \
-  --source-org my-org \
-  --source-repo old-repo \
-  --target-org my-org \
-  --target-repo new-repo \
-  --source-pat ghp_xxxxxxxxxxxxxxxxxxxx \
-  --target-pat ghp_yyyyyyyyyyyyyyyyyyyyyy \
+export GITHUB_TOKEN=<your-token>
+python main.py \
+  --source-org <source-org> \
+  --source-repo <source-repo> \
+  --target-org <target-org> \
+  --target-repo <target-repo>
+```
+
+### With Verbose Logging
+
+```bash
+python main.py \
+  --source-org myorg \
+  --source-repo source-repo \
+  --target-org targetorg \
+  --target-repo target-repo \
   --verbose
-```
-
-### Using GITHUB_TOKEN with --load
-
-If you have `GITHUB_TOKEN` set in your environment (e.g., from `gh auth` or CI/CD), you can use the `--load` flag to automatically use it as both the source and target PATs:
-
-```bash
-# Set GITHUB_TOKEN first (or it's already set from gh CLI)
-export GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
-
-# Now you don't need --source-pat or --target-pat
-gh secrets-migrator \
-  --source-org my-org \
-  --source-repo old-repo \
-  --target-org my-org \
-  --target-repo new-repo \
-  --load \
-  --verbose
-```
-
-## Development
-
-### Make Targets
-
-Use the provided Makefile for common development tasks:
-
-```bash
-make help          # Show all available commands
-make build         # Build the binary
-make build-all     # Build for all platforms
-make test          # Run tests with coverage
-make coverage      # Display test coverage report
-make fmt           # Format code
-make lint          # Run linter
-make vet           # Run go vet
-make dev           # Development workflow (fmt + vet + build)
-make all           # Run all checks and build
-make clean         # Clean build artifacts
-make install       # Build and install locally
-```
-
-### Building for Different Platforms
-
-```bash
-# Using Make (preferred)
-make build-all
-
-# Or manually for specific platforms with version info
-# Get the current git commit hash
-COMMIT_HASH=$(git rev-parse --short HEAD)
-
-# Build for different platforms
-GOOS=linux GOARCH=amd64 go build -ldflags "-X main.Version=$COMMIT_HASH" -o gh-secrets-migrator-linux-amd64 ./cmd/gh-secrets-migrator
-GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.Version=$COMMIT_HASH" -o gh-secrets-migrator-darwin-arm64 ./cmd/gh-secrets-migrator
-GOOS=windows GOARCH=amd64 go build -ldflags "-X main.Version=$COMMIT_HASH" -o gh-secrets-migrator.exe ./cmd/gh-secrets-migrator
-```
-
-### Running Tests
-
-```bash
-# Run all tests
-make test
-
-# Run with verbose output
-go test -v ./...
-
-# Run specific test
-go test -v -run TestName ./...
-
-# View coverage report
-make coverage
-```
-
-### Code Quality
-
-```bash
-# Format code
-make fmt
-
-# Run linter (requires golangci-lint)
-make lint
-
-# Run go vet
-make vet
 ```
 
 ## How It Works
 
-1. **Authenticates** with both source and target repositories using the provided PATs
-2. **Retrieves** the target repository's public key for encryption
-3. **Stores** the target PAT as a temporary secret in the source repository
-4. **Creates** a new branch (`migrate-secrets`) in the source repository
-5. **Generates** a GitHub Actions workflow that will:
-   - Retrieve all secrets from the source repository
-   - Encrypt each secret with the target repository's public key
-   - Create each secret in the target repository
-   - Clean up the temporary secret and branch
-6. **Commits** the workflow file to trigger the migration
+1. **Go CLI validates** - Checks GITHUB_TOKEN or explicit PATs
+2. **Lists secrets** - Gets all secrets from source repo (for logging)
+3. **Creates target PAT secret** - Stores target PAT in source repo as `SECRETS_MIGRATOR_TARGET_PAT` (encrypted)
+4. **Creates migration branch** - Creates a new branch called `migrate-secrets`
+5. **Pushes workflow** - Commits GitHub Actions workflow to migration branch
+6. **Workflow runs** - Triggered by push to `migrate-secrets` branch:
+   - Reads all secrets from source repo
+   - For each secret: creates it in target repo using target PAT
+   - Cleans up: deletes `SECRETS_MIGRATOR_TARGET_PAT` from source repo
+   - Deletes the migration branch
 
-The workflow runs on Windows with PowerShell and uses the `Sodium.Core` NuGet package for encryption, ensuring compatibility with GitHub's secret encryption standards.
+## Makefile Commands
 
-## Security Considerations
+```bash
+make install       # Install dependencies
+make dev          # Install with dev dependencies
+make lint         # Run linting checks
+make format       # Format code with black
+make test         # Run tests
+make run          # Run the migrator
+make clean        # Clean build artifacts
+make help         # Show help
+```
 
-- **PATs are never stored**: They are only used during execution and in the generated workflow
-- **Encryption**: Secrets are encrypted using libsodium's sealed box encryption
-- **Temporary cleanup**: The temporary `SECRETS_MIGRATOR_PAT` secret is automatically deleted after migration
-- **Ignored secrets**: `github_token` and `SECRETS_MIGRATOR_PAT` are not migrated
-- **No logging of secrets**: Actual secret values are never logged or displayed
+## Configuration
+
+### Required Flags
+
+- `--source-org`: Source organization name
+- `--source-repo`: Source repository name
+- `--target-org`: Target organization name
+- `--target-repo`: Target repository name
+
+### Optional Flags
+
+- `--source-pat`: Source PAT (required if GITHUB_TOKEN not set)
+- `--target-pat`: Target PAT (required if GITHUB_TOKEN not set)
+- `--verbose`: Enable verbose logging (shows debug messages)
+
+### Environment Variables
+
+- `GITHUB_TOKEN`: If set, uses this token for both source and target authentication
+
+## Security Notes
+
+- ✅ Secrets are encrypted at rest in GitHub
+- ✅ Encrypted using GitHub's public key (libsodium sealed boxes)
+- ✅ Only available to workflows via `${{ secrets.* }}` context
+- ✅ Temporary `SECRETS_MIGRATOR_TARGET_PAT` is cleaned up after workflow
+- ✅ Secrets are masked in logs by GitHub Actions
+
+## Limitations
+
+- Requires repo and workflow scopes on PATs
+- Cannot migrate organization-level secrets (only repo-level)
+- Workflow runs on source repo (not target)
 
 ## Troubleshooting
 
-### "Failed to get target repository public key"
+### "Connection refused" or Authentication errors
 
-- Ensure the target PAT has `actions:read` and `secrets:write` permissions
-- Verify the repository path is correct
-- Check that the target repository exists and is accessible
+- Verify your PATs are valid and have correct scopes
+- Check that organization/repository names are correct
+- Ensure PATs have `repo` and `workflow` scopes
 
-### "Failed to create SECRETS_MIGRATOR_PAT secret"
+### Workflow doesn't run
 
-- Ensure the source PAT has `repo` and `admin:repo_hook` permissions
-- Verify both repositories exist
-- Check that you have write access to the source repository
+- Check that the migration branch was created: `Settings > Branches`
+- Verify GitHub Actions is enabled in the source repository
+- Check the Actions tab for any workflow errors
 
-### "Failed to create workflow file"
+### Secrets not appearing in target repo
 
-- Ensure the `.github/workflows` directory can be created
-- Check that the source PAT has write access to the repository
-- Verify the branch was created successfully
+- Verify target PAT has permission to create secrets in target repo
+- Check that secret names don't start with `SECRETS_MIGRATOR_` (filtered out)
+- Review workflow logs in the Actions tab
 
-## Dependencies
-
-The project uses the following key dependencies:
-
-- **github.com/google/go-github/v57**: Official GitHub API client library
-- **github.com/spf13/cobra**: CLI framework for building commands
-- **golang.org/x/crypto**: Cryptographic operations
-- **golang.org/x/oauth2**: OAuth2 authentication
-
-See `go.mod` for the complete list of dependencies.
-
-## Release Process
-
-Releases are automated using GoReleaser. To create a new release:
+## Development
 
 ```bash
-# Create a git tag
-git tag v1.0.0
+# Set up development environment
+make dev
 
-# Push the tag
-git push origin v1.0.0
+# Run with verbose logging
+python main.py --source-org myorg --source-repo repo --target-org targetorg --target-repo target --verbose
 
-# GoReleaser will automatically build and publish
-# (Requires GitHub Actions workflow to be configured)
+# Format code
+make format
+
+# Run linting
+make lint
+
+# Clean up
+make clean
 ```
-
-See `.goreleaser.yml` for release configuration details.
-
-## Comparison with Original C# Version
-
-| Feature | C# Version | Go Version |
-|---------|-----------|-----------|
-| Runtime | .NET 6 required | No runtime needed |
-| Binary size | ~100MB+ (with runtime) | ~8MB standalone |
-| Single binary | No | Yes |
-| CLI framework | System.CommandLine | Cobra |
-| Project structure | Flat | Follows Go conventions |
-| Build tool | MSBuild/dotnet CLI | go build / Make |
-| Cross-platform | Requires runtime per platform | Single compile per platform |
-| Code organization | Monolithic | Package-based |
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
-
-## Demo
-
-See the [project repository](https://github.com/renan-alm/gh-secrets-migrator) for documentation and examples.
-
-## Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -am 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-Please ensure:
-
-- Code is formatted with `go fmt`
-- Tests pass with `go test ./...`
-- Code passes linting with `golangci-lint`
-
-## Original Project
-
-This project migrates secrets between GitHub repositories efficiently and securely.
+[LICENSE](LICENSE)

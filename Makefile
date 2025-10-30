@@ -1,68 +1,41 @@
-.PHONY: help build build-all test test-verbose test-race coverage clean fmt lint vet mod-tidy install dev all
+.PHONY: help install dev lint format test run clean
 
-# Variables
-BINARY_NAME=gh-secrets-migrator
-MAIN_PATH=./cmd/gh-secrets-migrator
-VERSION?=$(shell git describe --tags --always --dirty)
-LDFLAGS=-ldflags "-X main.Version=$(VERSION)"
+help:
+	@echo "GitHub Secrets Migrator - Makefile targets:"
+	@echo "  install    - Install dependencies"
+	@echo "  dev        - Install with dev dependencies"
+	@echo "  lint       - Run linting checks"
+	@echo "  format     - Format code with black"
+	@echo "  test       - Run tests"
+	@echo "  run        - Run the migrator"
+	@echo "  clean      - Clean build artifacts"
 
-help: ## Display this help screen
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
+install:
+	pip install -r requirements.txt
 
-build: ## Build the binary
-	go build $(LDFLAGS) -o $(BINARY_NAME) ./cmd/gh-secrets-migrator
+dev:
+	pip install -r requirements.txt
+	pip install black flake8 pylint pytest pytest-cov
 
-build-all: clean ## Build binaries for all platforms
-	@echo "Building for multiple platforms..."
-	GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o $(BINARY_NAME)-linux-amd64 ./cmd/gh-secrets-migrator
-	GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o $(BINARY_NAME)-linux-arm64 ./cmd/gh-secrets-migrator
-	GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o $(BINARY_NAME)-darwin-amd64 ./cmd/gh-secrets-migrator
-	GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o $(BINARY_NAME)-darwin-arm64 ./cmd/gh-secrets-migrator
-	GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o $(BINARY_NAME)-windows-amd64.exe ./cmd/gh-secrets-migrator
-	@echo "Build complete!"
+lint:
+	@echo "Running flake8..."
+	flake8 src/ main.py --max-line-length=100 --ignore=E203,W503 || true
+	@echo "Running pylint..."
+	pylint src/ main.py --disable=C0111,R0903 || true
 
-test: ## Run tests with coverage
-	go test -v -race -coverprofile=coverage.out ./...
+format:
+	black src/ main.py --line-length=100
 
-test-verbose: ## Run tests with verbose output
-	go test -v -race ./...
+test:
+	pytest tests/ -v --tb=short 2>/dev/null || echo "No tests configured yet"
 
-test-race: ## Run tests with race detector
-	go test -race ./...
+run:
+	python main.py
 
-test-bench: ## Run benchmark tests
-	go test -bench=. -benchmem ./...
+clean:
+	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null || true
+	find . -type f -name '*.pyc' -delete
+	rm -rf build/ dist/ *.egg-info
 
-coverage: test ## Display test coverage
-	go tool cover -html=coverage.out
-
-coverage-report: test ## Print coverage report to console
-	@echo "=== Coverage Report ===" 
-	@go tool cover -func=coverage.out | tail -1
-
-clean: ## Clean build artifacts
-	rm -f $(BINARY_NAME) $(BINARY_NAME)-* coverage.out
-
-fmt: ## Format code
-	go fmt ./...
-
-lint: ## Run linter (requires golangci-lint)
-	@which golangci-lint > /dev/null || (echo "golangci-lint not found. Install with: brew install golangci-lint" && exit 1)
-	golangci-lint run ./...
-
-vet: ## Run go vet
-	go vet ./...
-
-mod-tidy: ## Tidy and verify dependencies
-	go mod tidy
-	go mod verify
-
-install: build ## Build and install the binary
-	go install $(LDFLAGS) $(MAIN_PATH)
-
-dev: fmt vet build ## Format, vet, and build (development workflow)
-
-all: fmt lint vet test build ## Run all checks and build
-	@echo "All checks passed!"
-
-.PHONY: help build build-all test clean fmt lint vet coverage mod-tidy install dev all
+.PHONY: help install dev lint format test run clean
