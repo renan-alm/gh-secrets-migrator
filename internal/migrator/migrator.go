@@ -52,18 +52,29 @@ func (m *Migrator) Run(ctx context.Context) error {
 
 	branchName := "migrate-secrets"
 
-	// Get the public key from the target repository
-	m.log.Debug("Getting target repository public key...")
-	publicKey, publicKeyID, err := m.targetAPI.GetRepoPublicKey(ctx, m.config.TargetOrg, m.config.TargetRepo)
+	// Get all secrets from source repository (read-only, for information)
+	m.log.Debug("Fetching list of secrets from source repository...")
+	secretNames, err := m.sourceAPI.ListRepoSecrets(ctx, m.config.SourceOrg, m.config.SourceRepo)
 	if err != nil {
-		return fmt.Errorf("failed to get target repository public key: %w", err)
+		return fmt.Errorf("failed to list secrets: %w", err)
 	}
 
-	// Create the target PAT secret in the source repository
-	m.log.Debug("Creating SECRETS_MIGRATOR_PAT secret in source repository...")
-	err = m.sourceAPI.CreateRepoSecret(ctx, m.config.SourceOrg, m.config.SourceRepo, publicKey, publicKeyID, "SECRETS_MIGRATOR_PAT", m.config.TargetPAT)
-	if err != nil {
-		return fmt.Errorf("failed to create SECRETS_MIGRATOR_PAT secret: %w", err)
+	// Filter out system secrets and display what will be migrated
+	var secretsToMigrate []string
+	for _, name := range secretNames {
+		if name != "github_token" && name != "SECRETS_MIGRATOR_PAT" {
+			secretsToMigrate = append(secretsToMigrate, name)
+		}
+	}
+
+	if len(secretsToMigrate) == 0 {
+		m.log.Info("No secrets to migrate (found only system secrets)")
+		return nil
+	}
+
+	m.log.Infof("Secrets to migrate (%d total):", len(secretsToMigrate))
+	for _, name := range secretsToMigrate {
+		m.log.Infof("  - %s", name)
 	}
 
 	// Get default branch and commit SHA
@@ -96,8 +107,19 @@ func (m *Migrator) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to create branch: %w", err)
 	}
 
+	// Create placeholder secrets in target repository
+	m.log.Infof("Creating placeholder secrets in target repository...")
+	for _, secretName := range secretsToMigrate {
+		m.log.Debugf("Creating placeholder for secret: %s", secretName)
+		err = m.targetAPI.CreateRepoSecretPlaintext(ctx, m.config.TargetOrg, m.config.TargetRepo, secretName, "REPLACE_ME_LATER")
+		if err != nil {
+			return fmt.Errorf("failed to create placeholder for secret %s: %w", secretName, err)
+		}
+		m.log.Infof("  ✓ Created placeholder for '%s'", secretName)
+	}
+
 	// Generate and create the workflow file
-	workflow := GenerateWorkflow(m.config.TargetOrg, m.config.TargetRepo, branchName)
+	workflow := GenerateWorkflow(m.config.TargetOrg, m.config.TargetRepo, branchName, secretsToMigrate)
 	m.log.Debug("Creating workflow file...")
 	err = m.sourceAPI.CreateFile(ctx, m.config.SourceOrg, m.config.SourceRepo, branchName, ".github/workflows/migrate-secrets.yml", workflow)
 	if err != nil {
@@ -110,7 +132,7 @@ func (m *Migrator) Run(ctx context.Context) error {
 }
 
 // GenerateWorkflow generates the GitHub Actions workflow for secret migration.
-func GenerateWorkflow(targetOrg, targetRepo, branchName string) string {
+func GenerateWorkflow(targetOrg, targetRepo, branchName string, secretNames []string) string {
 	workflow := fmt.Sprintf(`name: move-secrets
 on:
   push:

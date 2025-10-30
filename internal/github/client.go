@@ -89,13 +89,19 @@ func (c *Client) CreateRepoSecret(ctx context.Context, org, repo string, publicK
 	}
 	copy(publicKeyArray[:], publicKey)
 
+	c.log.Debugf("Creating secret %s: key length=%d, key_id=%s, secret_value_length=%d", secretName, len(publicKey), publicKeyID, len(secretValue))
+	c.log.Debugf("Public key (base64): %s", base64.StdEncoding.EncodeToString(publicKey))
+
 	// Encrypt the secret using libsodium's sealed box
-	encryptedSecret, err := box.SealAnonymous(nil, []byte(secretValue), &publicKeyArray, nil)
+	// box.SealAnonymous with rand.Reader produces: nonce (24 bytes) + ciphertext (message + 16 auth tag)
+	// For a 40-byte secret: 24 + 40 + 16 = 80 bytes total
+	sealed, err := box.SealAnonymous(nil, []byte(secretValue), &publicKeyArray, rand.Reader)
 	if err != nil {
 		return fmt.Errorf("failed to encrypt secret: %w", err)
 	}
 
-	encryptedValue := base64.StdEncoding.EncodeToString(encryptedSecret)
+	encryptedValue := base64.StdEncoding.EncodeToString(sealed)
+	c.log.Debugf("Encrypted secret (base64): %s (length=%d bytes)", encryptedValue, len(sealed))
 
 	secret := &github.EncryptedSecret{
 		Name:           secretName,
@@ -108,6 +114,25 @@ func (c *Client) CreateRepoSecret(ctx context.Context, org, repo string, publicK
 		return fmt.Errorf("failed to create secret: %w", err)
 	}
 	return nil
+}
+
+// CreateRepoSecretPlaintext creates a secret without encryption (useful for placeholders).
+func (c *Client) CreateRepoSecretPlaintext(ctx context.Context, org, repo, secretName, secretValue string) error {
+	// For plaintext secrets (like placeholders), GitHub still requires encryption, but we can use empty key ID
+	// Actually, we should just set it directly without encryption using the API
+	// The easier way is to use the REST API directly with the plaintext value
+
+	// This is a limitation: GitHub Actions requires encryption for all secrets via the standard API
+	// However, for testing/placeholders, we can set environment variables in the workflow instead
+	// For now, we'll encrypt it with the repository's public key
+
+	publicKey, publicKeyID, err := c.GetRepoPublicKey(ctx, org, repo)
+	if err != nil {
+		return fmt.Errorf("failed to get public key for plaintext secret: %w", err)
+	}
+
+	// Use the standard encrypted method but with the plaintext value
+	return c.CreateRepoSecret(ctx, org, repo, publicKey, publicKeyID, secretName, secretValue)
 }
 
 // ListRepoSecrets retrieves all secrets in the repository.
