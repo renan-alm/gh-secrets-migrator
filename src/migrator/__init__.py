@@ -38,41 +38,92 @@ class Migrator:
     def _validate_permissions(self) -> None:
         """Validate that both PATs have necessary permissions."""
         try:
-            # Check source PAT permissions (needs repo + secret management)
+            # Check source PAT permissions
             self.log.debug("Checking source PAT permissions...")
-            source_user = self.source_api.client.get_user()
-            source_repo = source_user.get_repo(self.config.source_repo)
-            self.log.debug(f"✓ Source PAT has access to {self.config.source_org}/{self.config.source_repo}")
+            source_repo_path = f"{self.config.source_org}/{self.config.source_repo}"
             
-            # Try to list secrets to verify permission
             try:
+                source_repo = self.source_api.client.get_repo(source_repo_path)
+                self.log.debug(f"✓ Source PAT has access to {source_repo_path}")
+                
+                # Try to list secrets to verify permission
                 secrets = source_repo.get_secrets()
                 _ = list(secrets)  # Force evaluation
-                self.log.debug("✓ Source PAT has permission to manage secrets in source repo")
-            except Exception as e:
-                raise RuntimeError(f"Source PAT cannot manage secrets: {e}")
+                self.log.debug("✓ Source PAT has permission to manage secrets")
+            except Exception as source_error:
+                error_msg = str(source_error)
+                if "404" in error_msg or "Not Found" in error_msg:
+                    raise RuntimeError(
+                        f"Source repository '{source_repo_path}' not found.\n"
+                        f"Please verify:\n"
+                        f"  - Organization name is correct: {self.config.source_org}\n"
+                        f"  - Repository name is correct: {self.config.source_repo}\n"
+                        f"  - PAT has access to the repository"
+                    )
+                elif "401" in error_msg or "Unauthorized" in error_msg:
+                    raise RuntimeError(
+                        f"Authentication failed for source repository.\n"
+                        f"The source PAT may be invalid, expired, or revoked.\n"
+                        f"Please verify your source-pat is correct."
+                    )
+                elif "403" in error_msg or "Resource not accessible" in error_msg:
+                    raise RuntimeError(
+                        f"Source PAT lacks permission to manage secrets.\n"
+                        f"Ensure your source PAT has these scopes:\n"
+                        f"  - 'repo' (Full control of private repositories)\n"
+                        f"  - 'workflow' (Update GitHub Action workflows)"
+                    )
+                else:
+                    raise RuntimeError(f"Cannot access source repository: {source_error}")
 
-            # Check target PAT permissions (needs repo + secret management)
+            # Check target PAT permissions
             self.log.debug("Checking target PAT permissions...")
-            target_user = self.target_api.client.get_user()
-            target_repo = target_user.get_repo(self.config.target_repo)
-            self.log.debug(f"✓ Target PAT has access to {self.config.target_org}/{self.config.target_repo}")
+            target_repo_path = f"{self.config.target_org}/{self.config.target_repo}"
             
-            # Try to list secrets to verify permission
             try:
+                target_repo = self.target_api.client.get_repo(target_repo_path)
+                self.log.debug(f"✓ Target PAT has access to {target_repo_path}")
+                
+                # Try to list secrets to verify permission
                 secrets = target_repo.get_secrets()
                 _ = list(secrets)  # Force evaluation
-                self.log.debug("✓ Target PAT has permission to manage secrets in target repo")
-            except Exception as e:
-                raise RuntimeError(f"Target PAT cannot manage secrets: {e}")
+                self.log.debug("✓ Target PAT has permission to manage secrets")
+            except Exception as target_error:
+                error_msg = str(target_error)
+                if "404" in error_msg or "Not Found" in error_msg:
+                    raise RuntimeError(
+                        f"Target repository '{target_repo_path}' not found.\n"
+                        f"Please verify:\n"
+                        f"  - Organization name is correct: {self.config.target_org}\n"
+                        f"  - Repository name is correct: {self.config.target_repo}\n"
+                        f"  - PAT has access to the repository"
+                    )
+                elif "401" in error_msg or "Unauthorized" in error_msg:
+                    raise RuntimeError(
+                        f"Authentication failed for target repository.\n"
+                        f"The target PAT may be invalid, expired, or revoked.\n"
+                        f"Please verify your target-pat is correct."
+                    )
+                elif "403" in error_msg or "Resource not accessible" in error_msg:
+                    raise RuntimeError(
+                        f"Target PAT lacks permission to manage secrets.\n"
+                        f"Ensure your target PAT has these scopes:\n"
+                        f"  - 'repo' (Full control of private repositories)\n"
+                        f"  - 'workflow' (Update GitHub Action workflows)"
+                    )
+                else:
+                    raise RuntimeError(f"Cannot access target repository: {target_error}")
 
             self.log.success("All PAT permissions validated!")
 
+        except RuntimeError:
+            # Re-raise our custom RuntimeErrors as-is
+            raise
         except Exception as e:
-            self.log.error(f"PAT validation failed: {e}")
+            self.log.error(f"Unexpected validation error: {type(e).__name__}: {e}")
             raise RuntimeError(
-                f"Invalid PAT credentials or insufficient permissions: {e}\n"
-                f"Ensure both PATs have 'repo' and 'admin:repo_hook' scopes."
+                f"Unexpected error during PAT validation: {type(e).__name__}\n"
+                f"Details: {e}"
             )
 
     def run(self) -> None:

@@ -58,7 +58,7 @@ def migrate(source_org, source_repo, target_org, target_repo, source_pat, target
     # Validate we have PATs for both
     if not source_pat_value or not target_pat_value:
         logger.error("source-pat and target-pat are required (or set GITHUB_TOKEN environment variable)")
-        raise click.Exit(1)
+        raise SystemExit(1)
 
     try:
         config = MigrationConfig(
@@ -74,6 +74,9 @@ def migrate(source_org, source_repo, target_org, target_repo, source_pat, target
         migrator = Migrator(config, logger)
         migrator.run()
 
+    except RuntimeError as e:
+        logger.error(str(e))
+        raise SystemExit(1)
     except Exception as e:
-        logger.error(f"Migration failed: {e}")
-        raise click.Exit(1)
+        logger.error(f"Unexpected error: {type(e).__name__}: {e}")
+        raise SystemExit(1)

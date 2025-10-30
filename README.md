@@ -45,7 +45,6 @@ For reading source repo and managing temporary secrets:
 
 - `repo` - Full control of private repositories
 - `workflow` - Update GitHub Action workflows (for branch/workflow management)
-- `admin:repo_hook` - Full control of repository hooks
 
 #### Target PAT Scopes
 
@@ -213,7 +212,6 @@ make help         # Show help
 - Verify your PATs are valid: `curl -H "Authorization: token <PAT>" https://api.github.com/user`
 - Check scopes: Go to GitHub Settings → Developer settings → Personal access tokens (classic) → Select token → View scopes
 - Ensure PATs have `repo` and `workflow` scopes
-- For source PAT, also ensure `admin:repo_hook` scope is selected
 
 ### "Connection refused" or Authentication errors
 
@@ -237,8 +235,8 @@ make help         # Show help
 
 ### "Resource not accessible by integration" error
 
-- This typically means the PAT doesn't have the `admin:repo_hook` scope
-- Update your source PAT to include `admin:repo_hook` scope
+- This typically means the PAT doesn't have the `repo` or `workflow` scope
+- Update your source PAT to include these scopes
 - Regenerate the PAT if needed
 
 ### Temporary secrets not being deleted
