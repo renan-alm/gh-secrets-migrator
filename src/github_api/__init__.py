@@ -65,7 +65,8 @@ class GitHubClient:
             repository.create_secret(secret_name, secret_value)
             self.log.debug(f"Created/updated secret {secret_name} in {org}/{repo}")
         except Exception as e:
-            raise RuntimeError(f"Failed to create/update secret: {e}")
+            self.log.error(f"Failed to create/update secret {secret_name}: {type(e).__name__}: {e}")
+            raise RuntimeError(f"Failed to create/update secret {secret_name}: {e}")
 
     def delete_secret(self, org: str, repo: str, secret_name: str) -> None:
         """Delete a secret from the repository."""

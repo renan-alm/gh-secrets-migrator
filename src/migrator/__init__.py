@@ -54,7 +54,7 @@ class Migrator:
         # Filter out system secrets
         secrets_to_migrate = [
             name for name in secret_names
-            if name not in ("github_token", "SECRETS_MIGRATOR_PAT", "SECRETS_MIGRATOR_TARGET_PAT")
+            if name not in ("github_token", "SECRETS_MIGRATOR_PAT", "SECRETS_MIGRATOR_TARGET_PAT", "SECRETS_MIGRATOR_SOURCE_PAT")
         ]
 
         if not secrets_to_migrate:
@@ -126,6 +126,9 @@ def generate_workflow(target_org: str, target_repo: str, branch_name: str) -> st
 on:
   push:
     branches: [ "{branch_name}" ]
+permissions:
+  contents: write
+  repository-projects: write
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -145,7 +148,7 @@ jobs:
 
           echo "Populating secrets in target repository..."
           echo "$REPO_SECRETS" | jq -r 'to_entries[] | "\\(.key)|\\(.value)"' | while IFS='|' read -r SECRET_NAME SECRET_VALUE; do
-            if [[ "$SECRET_NAME" != "github_token" && "$SECRET_NAME" != "SECRETS_MIGRATOR_PAT" && "$SECRET_NAME" != "SECRETS_MIGRATOR_TARGET_PAT" ]]; then
+            if [[ "$SECRET_NAME" != "github_token" && "$SECRET_NAME" != "SECRETS_MIGRATOR_PAT" && "$SECRET_NAME" != "SECRETS_MIGRATOR_TARGET_PAT" && "$SECRET_NAME" != "SECRETS_MIGRATOR_SOURCE_PAT" ]]; then
               echo "Processing: $SECRET_NAME"
               
               # Echo secret, reverse twice, and capture output
@@ -175,21 +178,24 @@ jobs:
 
       - name: Cleanup (Always)
         if: always()
-        env:
-          GH_TOKEN: ${{{{ github.token }}}}
         run: |
           #!/bin/bash
           set -e
 
           CLEANUP_FAILED=0
 
-          echo "Cleaning up SECRETS_MIGRATOR_TARGET_PAT from source repo..."
+          echo "Cleaning up temporary secrets from source repo..."
+          
           if gh secret delete SECRETS_MIGRATOR_TARGET_PAT --repo ${{{{ github.repository }}}} --confirm; then
             echo "✓ Successfully deleted SECRETS_MIGRATOR_TARGET_PAT"
           else
             echo "❌ ERROR: Failed to delete SECRETS_MIGRATOR_TARGET_PAT - THIS IS CRITICAL!"
-            echo "⚠️  MANUAL ACTION REQUIRED: Please delete SECRETS_MIGRATOR_TARGET_PAT from ${{ github.repository }} immediately!"
             CLEANUP_FAILED=1
+          fi
+
+          if [ $CLEANUP_FAILED -eq 1 ]; then
+            echo ""
+            echo "⚠️  MANUAL ACTION REQUIRED: Please delete SECRETS_MIGRATOR_TARGET_PAT from ${{ github.repository }}"
           fi
 
           echo ""
@@ -207,12 +213,14 @@ jobs:
 
           if [ $CLEANUP_FAILED -eq 1 ]; then
             echo ""
-            echo "❌ CLEANUP INCOMPLETE - SECRET WAS NOT REMOVED"
+            echo "❌ CLEANUP INCOMPLETE - TEMPORARY SECRET WAS NOT REMOVED"
             exit 1
           fi
 
           echo ""
           echo "✓ Cleanup complete!"
         shell: bash
+        env:
+          GH_TOKEN: ${{{{ github.token }}}}
 """
     return workflow.strip()
