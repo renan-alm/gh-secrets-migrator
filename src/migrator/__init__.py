@@ -261,9 +261,10 @@ class Migrator:
                 f"View progress: {workflow_run_url}"
             )
         else:
+            # Fallback to generic actions page if we can't get the specific run
             self.log.success(
-                f"Secrets migration in progress. Check on status at "
-                f"https://github.com/{self.config.source_org}/{self.config.source_repo}/actions"
+                f"Secrets migration workflow triggered!\n"
+                f"View progress: https://github.com/{self.config.source_org}/{self.config.source_repo}/actions?query=branch%3Amigrate-secrets"
             )
 
 
