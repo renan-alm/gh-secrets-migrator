@@ -5,6 +5,7 @@ A tool to migrate GitHub repository secrets from a source repository to a target
 ## Features
 
 - ✨ Migrates secrets from one GitHub repository to another
+- 🌍 Recreates repository environments in target repository
 - 🔐 Automatically encrypts secrets using GitHub's public key
 - 🤖 Uses GitHub Actions workflow for automated migration
 - 🔄 Supports both explicit PATs or GITHUB_TOKEN environment variable
@@ -117,6 +118,21 @@ python main.py \
   --verbose
 ```
 
+### Skipping Environment Recreation
+
+By default, environments from the source repository are recreated in the target repository. To skip this:
+
+```bash
+python main.py \
+  --source-org <source-org> \
+  --source-repo <source-repo> \
+  --target-org <target-org> \
+  --target-repo <target-repo> \
+  --source-pat <source-pat> \
+  --target-pat <target-pat> \
+  --skip-envs
+```
+
 ### Example
 
 ```bash
@@ -131,13 +147,17 @@ python main.py \
 ## How It Works
 
 1. **Validates PAT permissions** - Checks both PATs have necessary scopes before proceeding
-2. **Lists secrets** - Gets all secrets from source repo (for logging)
-3. **Creates temporary secrets** - Stores both PATs in source repo:
+2. **Recreates environments** (unless `--skip-envs` is set) - Creates environments from source repo in target repo:
+   - Lists all environments from source repository
+   - Creates each environment in target repository
+   - Gracefully skips if environment already exists (idempotent)
+3. **Lists secrets** - Gets all secrets from source repo (for logging)
+4. **Creates temporary secrets** - Stores both PATs in source repo:
    - `SECRETS_MIGRATOR_TARGET_PAT` (encrypted) - Used by workflow to access target repo
    - `SECRETS_MIGRATOR_SOURCE_PAT` (encrypted) - Used by workflow cleanup to delete temporary secrets
-4. **Creates migration branch** - Creates a new branch called `migrate-secrets`
-5. **Pushes workflow** - Commits GitHub Actions workflow to migration branch
-6. **Workflow runs** - Triggered by push to `migrate-secrets` branch:
+5. **Creates migration branch** - Creates a new branch called `migrate-secrets`
+6. **Pushes workflow** - Commits GitHub Actions workflow to migration branch
+7. **Workflow runs** - Triggered by push to `migrate-secrets` branch:
    - Reads all secrets from source repo
    - Filters out system secrets (`SECRETS_MIGRATOR_*`, `github_token`)
    - For each remaining secret: creates it in target repo using target PAT
@@ -173,6 +193,7 @@ make help         # Show help
 - `--source-pat`: Source PAT (required if GITHUB_TOKEN not set)
 - `--target-pat`: Target PAT (required if GITHUB_TOKEN not set)
 - `--verbose`: Enable verbose logging (shows debug messages)
+- `--skip-envs`: Skip environment recreation (by default environments are recreated)
 
 ### Environment Variables
 
@@ -197,6 +218,32 @@ make help         # Show help
 - Review the generated workflow before running (it's visible in the Actions tab)
 - Tokens are visible to anyone with write access to the source repository (they can read the workflow file)
 
+## Environment Recreation
+
+The tool automatically recreates all environments from the source repository in the target repository. This is useful for maintaining environment parity between repositories.
+
+### Behavior
+
+- **Default**: Environments are automatically recreated
+- **Graceful**: If an environment already exists in the target (HTTP 409), it is silently skipped
+- **Idempotent**: Safe to run multiple times; existing environments won't cause failures
+- **Optional**: Use `--skip-envs` flag to skip environment recreation
+
+### Example Output
+
+```bash
+ℹ️  Recreating environments...
+ℹ️  Environments to recreate (3 total):
+  - production
+  - staging
+  - development
+✅ Environment recreation completed!
+```
+
+### Future: Environment-Specific Secrets
+
+This is a stepping stone for future functionality to migrate environment-specific secrets. Currently, only repository-level secrets are migrated.
+
 ## Limitations
 
 - Requires repo-level secrets (cannot migrate organization-level secrets)
@@ -204,6 +251,7 @@ make help         # Show help
 - Workflow runs on source repository (not target)
 - Cannot migrate action secrets from Dependabot or Codespaces scopes
 - Source and target repositories must be accessible to their respective PATs
+- Environment-specific secrets are not yet migrated (repository-level only)
 
 ## Troubleshooting
 

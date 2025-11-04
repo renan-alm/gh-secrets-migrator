@@ -16,7 +16,8 @@ class MigrationConfig:
         target_repo: str,
         source_pat: str,
         target_pat: str,
-        verbose: bool = False
+        verbose: bool = False,
+        skip_envs: bool = False
     ):
         self.source_org = source_org
         self.source_repo = source_repo
@@ -25,7 +26,7 @@ class MigrationConfig:
         self.source_pat = source_pat
         self.target_pat = target_pat
         self.verbose = verbose
-
+        self.skip_envs = skip_envs
 
 class Migrator:
     """Handles the secrets migration process."""
@@ -43,23 +44,30 @@ class Migrator:
                 f"{self.config.source_org}/{self.config.source_repo}"
             )
             
-            # Get workflow runs for the migrate-secrets workflow
-            runs = repo.get_workflow("migrate-secrets.yml").get_runs(
-                branch=branch_name,
-                status="in_progress"
-            )
+            # Try to get workflow by name
+            try:
+                workflow = repo.get_workflow("migrate-secrets.yml")
+            except Exception:
+                # If workflow not found by name, try by ID or get first workflow
+                workflows = repo.get_workflows()
+                workflow = None
+                for w in workflows:
+                    if "migrate-secrets" in w.name:
+                        workflow = w
+                        break
+                if not workflow:
+                    return ""
             
-            # Get the most recent run
-            for run in runs:
-                return f"https://github.com/{self.config.source_org}/{self.config.source_repo}/actions/runs/{run.id}"
-            
-            # If no in_progress run found, try queued
-            runs = repo.get_workflow("migrate-secrets.yml").get_runs(
-                branch=branch_name,
-                status="queued"
-            )
-            for run in runs:
-                return f"https://github.com/{self.config.source_org}/{self.config.source_repo}/actions/runs/{run.id}"
+            # Try multiple statuses: in_progress, queued, completed, failure
+            for status in ["in_progress", "queued", "completed", "failure"]:
+                try:
+                    runs = workflow.get_runs(branch=branch_name, status=status)
+                    for run in runs:
+                        self.log.debug(f"Found workflow run {run.id} with status {status}")
+                        return f"https://github.com/{self.config.source_org}/{self.config.source_repo}/actions/runs/{run.id}"
+                except Exception as status_error:
+                    self.log.debug(f"No {status} runs found: {status_error}")
+                    continue
             
             return ""
         except Exception as e:
@@ -157,6 +165,44 @@ class Migrator:
                 f"Details: {e}"
             )
 
+    def _recreate_environments(self) -> None:
+        """List environments from source and recreate in target repository."""
+        try:
+            # List environments from source repository
+            self.log.debug("Fetching list of environments from source repository...")
+            environments = self.source_api.list_environments(
+                self.config.source_org, self.config.source_repo
+            )
+
+            if not environments:
+                self.log.info("No environments to recreate")
+                return
+
+            self.log.info(f"Environments to recreate ({len(environments)} total):")
+            for env_name in environments:
+                self.log.info(f"  - {env_name}")
+
+            # Create environments in target repository
+            self.log.debug("Creating environments in target repository...")
+            for env_name in environments:
+                try:
+                    self.target_api.create_environment(
+                        self.config.target_org,
+                        self.config.target_repo,
+                        env_name
+                    )
+                    self.log.debug(f"Successfully created/verified environment '{env_name}'")
+                except RuntimeError as e:
+                    # Only log as warning - don't fail the entire migration
+                    self.log.warn(f"Environment '{env_name}' error: {e}")
+
+            self.log.success("Environment recreation completed!")
+
+        except Exception as e:
+            self.log.error(f"Unexpected error during environment recreation: {type(e).__name__}: {e}")
+            raise RuntimeError(f"Failed to recreate environments: {e}")
+
+
     def run(self) -> None:
         """Execute the migration process."""
         self.log.info("Migrating Secrets...")
@@ -169,9 +215,16 @@ class Migrator:
         self.log.info("Validating PAT permissions...")
         self._validate_permissions()
 
+        # Step 1: Recreate environments (if not skipped)
+        if not self.config.skip_envs:
+            self.log.info("Recreating environments...")
+            self._recreate_environments()
+        else:
+            self.log.info("Skipping environment recreation (--skip-envs flag set)")
+
         branch_name = "migrate-secrets"
 
-        # Step 1: List secrets from source repository
+        # Step 2: List secrets from source repository
         self.log.debug("Fetching list of secrets from source repository...")
         secret_names = self.source_api.list_repo_secrets(
             self.config.source_org, self.config.source_repo
@@ -191,7 +244,20 @@ class Migrator:
         for name in secrets_to_migrate:
             self.log.info(f"  - {name}")
 
-        # Step 2: Get default branch and commit SHA
+        # Step 2b: List environment secrets from source repository (for informational purposes)
+        self.log.debug("Fetching environment secrets from source repository...")
+        env_secrets_info = self.source_api.list_environment_names_with_secret_count(
+            self.config.source_org, self.config.source_repo
+        )
+        
+        if env_secrets_info:
+            self.log.info(f"Environment secrets to migrate ({len(env_secrets_info)} total):")
+            for env_name, secret_count in env_secrets_info.items():
+                self.log.info(f"  - {env_name} ({secret_count} secrets)")
+        else:
+            self.log.debug("No environment secrets found in source repository")
+
+        # Step 3: Get default branch and commit SHA
         self.log.debug("Getting default branch...")
         default_branch = self.source_api.get_default_branch(
             self.config.source_org, self.config.source_repo
@@ -202,13 +268,13 @@ class Migrator:
             self.config.source_org, self.config.source_repo, default_branch
         )
 
-        # Step 3: Delete old migration branch if it exists
+        # Step 4: Delete old migration branch if it exists
         self.log.debug(f"Checking if branch {branch_name} exists...")
         self.source_api.delete_branch(
             self.config.source_org, self.config.source_repo, branch_name
         )
 
-        # Step 4: Create target PAT secret in source repo (for workflow to access target)
+        # Step 5: Create target PAT secret in source repo (for workflow to access target)
         self.log.info("Creating SECRETS_MIGRATOR_TARGET_PAT in source repository...")
         self.source_api.create_repo_secret(
             self.config.source_org,
@@ -218,7 +284,7 @@ class Migrator:
         )
         self.log.debug("Successfully created SECRETS_MIGRATOR_TARGET_PAT")
 
-        # Step 4b: Create source PAT secret in source repo (for workflow cleanup only)
+        # Step 5b: Create source PAT secret in source repo (for workflow cleanup only)
         self.log.info("Creating SECRETS_MIGRATOR_SOURCE_PAT in source repository...")
         self.source_api.create_repo_secret(
             self.config.source_org,
@@ -228,7 +294,7 @@ class Migrator:
         )
         self.log.debug("Successfully created SECRETS_MIGRATOR_SOURCE_PAT")
 
-        # Step 5: Create migration branch
+        # Step 6: Create migration branch
         self.log.debug(f"Creating branch {branch_name}...")
         self.source_api.create_branch(
             self.config.source_org,
@@ -237,8 +303,9 @@ class Migrator:
             master_commit_sha
         )
 
-        # Step 6: Generate and create workflow file
+        # Step 7: Generate and create workflow file
         workflow = generate_workflow(
+            self.config.source_org, self.config.source_repo, 
             self.config.target_org, self.config.target_repo, branch_name
         )
         self.log.debug("Creating workflow file...")
@@ -250,11 +317,20 @@ class Migrator:
             workflow
         )
 
-        # Step 7: Fetch workflow run details
+        # Step 7: Fetch workflow run details with retries
         self.log.debug("Waiting for workflow to be triggered...")
-        time.sleep(2)  # Give GitHub a moment to detect the new push and trigger the workflow
         
-        workflow_run_url = self._get_workflow_run_url(branch_name)
+        workflow_run_url = ""
+        max_retries = 6
+        for attempt in range(max_retries):
+            time.sleep(2 if attempt == 0 else 3)  # Initial 2s, then 3s between retries
+            workflow_run_url = self._get_workflow_run_url(branch_name)
+            if workflow_run_url:
+                self.log.debug(f"Found workflow run URL on attempt {attempt + 1}")
+                break
+            if attempt < max_retries - 1:
+                self.log.debug(f"Workflow run not yet found, retrying... (attempt {attempt + 1}/{max_retries})")
+        
         if workflow_run_url:
             self.log.success(
                 f"Secrets migration workflow triggered!\n"
@@ -262,13 +338,14 @@ class Migrator:
             )
         else:
             # Fallback to generic actions page if we can't get the specific run
+            self.log.debug("Could not find specific workflow run, using generic actions URL")
             self.log.success(
                 f"Secrets migration workflow triggered!\n"
                 f"View progress: https://github.com/{self.config.source_org}/{self.config.source_repo}/actions?query=branch%3Amigrate-secrets"
             )
 
 
-def generate_workflow(target_org: str, target_repo: str, branch_name: str) -> str:
+def generate_workflow(source_org: str, source_repo: str, target_org: str, target_repo: str, branch_name: str) -> str:
     """Generate the GitHub Actions workflow for secret migration."""
     workflow = f"""name: move-secrets
 on:
@@ -278,10 +355,10 @@ permissions:
   contents: write
   repository-projects: write
 jobs:
-  migrate-secrets:
+  migrate-repo-secrets:
     runs-on: ubuntu-latest
     steps:
-      - name: Populate Secrets
+      - name: Populate Repository Secrets
         id: migrate
         env:
           REPO_SECRETS: ${{{{ toJSON(secrets) }}}}
@@ -322,6 +399,44 @@ jobs:
           fi
 
           echo "✓ All secrets migrated successfully!"
+        shell: bash
+
+      - name: Migrate Environment Secrets
+        env:
+          SOURCE_ORG: '{source_org}'
+          SOURCE_REPO: '{source_repo}'
+          TARGET_ORG: '{target_org}'
+          TARGET_REPO: '{target_repo}'
+          SOURCE_PAT: ${{{{ secrets.SECRETS_MIGRATOR_SOURCE_PAT }}}}
+          GH_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_TARGET_PAT }}}}
+        run: |
+          #!/bin/bash
+          set -e
+
+          echo "Collecting environments from source repository..."
+          
+          # Get list of environments and convert directly to JSON array
+          JSON_ENVS=$(GH_TOKEN=$SOURCE_PAT gh api repos/$SOURCE_ORG/$SOURCE_REPO/environments 2>/dev/null | jq -c '[.environments[].name]' || echo "[]")
+          
+          echo "Found environments: $JSON_ENVS"
+          
+          # Parse JSON array and iterate through environments
+          if [ "$JSON_ENVS" = "[]" ]; then
+            echo "ℹ️  No environments to process"
+            exit 0
+          fi
+          
+          echo "$JSON_ENVS" | jq -r '.[]' | while read -r ENVIRONMENT; do
+            echo ""
+            echo "=========================================="
+            echo "Processing environment: $ENVIRONMENT"
+            echo "=========================================="
+            
+            # List secrets available in this environment
+            echo "Secret names:"
+            ENV_SECRETS=$(gh api repos/$TARGET_ORG/$TARGET_REPO/environments/$ENVIRONMENT/secrets 2>/dev/null | jq -c '[.secrets[].name]' || echo "[]")
+            echo "$ENV_SECRETS" | jq -r '.[]' || true
+          done
         shell: bash
 
       - name: Cleanup (Always)

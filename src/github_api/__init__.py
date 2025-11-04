@@ -91,3 +91,56 @@ class GitHubClient:
             self.log.debug(f"Created file {path} on branch {branch}")
         except Exception as e:
             raise RuntimeError(f"Failed to create file: {e}")
+
+    def list_environments(self, org: str, repo: str) -> List[str]:
+        """List all environments in the repository."""
+        try:
+            repository = self.client.get_repo(f"{org}/{repo}")
+            environments = []
+            for env in repository.get_environments():
+                environments.append(env.name)
+            return environments
+        except Exception as e:
+            self.log.debug(f"Failed to list environments: {e}")
+            return []
+
+    def create_environment(self, org: str, repo: str, environment_name: str) -> None:
+        """Create an environment in the repository. Gracefully handles if already exists."""
+        try:
+            repository = self.client.get_repo(f"{org}/{repo}")
+            repository.create_environment(environment_name)
+            self.log.debug(f"Created environment '{environment_name}' in {org}/{repo}")
+        except Exception as e:
+            error_str = str(e)
+            # Handle 409 Conflict (environment already exists)
+            if "409" in error_str or "already exists" in error_str.lower():
+                self.log.debug(f"Environment '{environment_name}' already exists, skipping")
+            else:
+                self.log.error(f"Failed to create environment '{environment_name}': {type(e).__name__}: {e}")
+                raise RuntimeError(f"Failed to create environment '{environment_name}': {e}")
+
+    def list_environment_names_with_secret_count(self, org: str, repo: str) -> dict:
+        """List all environments with their secret counts.
+        
+        Returns a dictionary mapping environment names to secret counts.
+        Useful for user-friendly display.
+        """
+        try:
+            repository = self.client.get_repo(f"{org}/{repo}")
+            env_info = {}
+            
+            for env in repository.get_environments():
+                secret_count = 0
+                try:
+                    env_obj = repository.get_environment(env.name)
+                    env_secrets_obj = env_obj.get_secrets()
+                    secret_count = len(list(env_secrets_obj))
+                except Exception as e:
+                    self.log.debug(f"Could not fetch secret count for environment '{env.name}': {e}")
+                
+                env_info[env.name] = secret_count
+            
+            return env_info
+        except Exception as e:
+            self.log.debug(f"Failed to list environments with secret count: {e}")
+            return {}
