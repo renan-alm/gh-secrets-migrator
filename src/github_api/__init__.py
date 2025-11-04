@@ -91,3 +91,30 @@ class GitHubClient:
             self.log.debug(f"Created file {path} on branch {branch}")
         except Exception as e:
             raise RuntimeError(f"Failed to create file: {e}")
+
+    def list_environments(self, org: str, repo: str) -> List[str]:
+        """List all environments in the repository."""
+        try:
+            repository = self.client.get_repo(f"{org}/{repo}")
+            environments = []
+            for env in repository.get_environments():
+                environments.append(env.name)
+            return environments
+        except Exception as e:
+            self.log.debug(f"Failed to list environments: {e}")
+            return []
+
+    def create_environment(self, org: str, repo: str, environment_name: str) -> None:
+        """Create an environment in the repository. Gracefully handles if already exists."""
+        try:
+            repository = self.client.get_repo(f"{org}/{repo}")
+            repository.create_environment(environment_name)
+            self.log.debug(f"Created environment '{environment_name}' in {org}/{repo}")
+        except Exception as e:
+            error_str = str(e)
+            # Handle 409 Conflict (environment already exists)
+            if "409" in error_str or "already exists" in error_str.lower():
+                self.log.debug(f"Environment '{environment_name}' already exists, skipping")
+            else:
+                self.log.error(f"Failed to create environment '{environment_name}': {type(e).__name__}: {e}")
+                raise RuntimeError(f"Failed to create environment '{environment_name}': {e}")

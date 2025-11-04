@@ -41,7 +41,12 @@ from src.migrator import Migrator, MigrationConfig
     is_flag=True,
     help="Enable verbose logging"
 )
-def migrate(source_org, source_repo, target_org, target_repo, source_pat, target_pat, verbose):
+@click.option(
+    "--skip-envs",
+    is_flag=True,
+    help="Skip environment recreation (by default environments are recreated)"
+)
+def migrate(source_org, source_repo, target_org, target_repo, source_pat, target_pat, verbose, skip_envs):
     """Migrate GitHub secrets from one repository to another."""
     logger = Logger(verbose=verbose)
 
@@ -68,7 +73,8 @@ def migrate(source_org, source_repo, target_org, target_repo, source_pat, target
             target_repo=target_repo,
             source_pat=source_pat_value,
             target_pat=target_pat_value,
-            verbose=verbose
+            verbose=verbose,
+            skip_envs=skip_envs
         )
 
         migrator = Migrator(config, logger)
