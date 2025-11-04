@@ -345,7 +345,7 @@ jobs:
   migrate-secrets:
     runs-on: ubuntu-latest
     steps:
-      - name: Populate Secrets
+      - name: Populate Repository Secrets
         id: migrate
         env:
           REPO_SECRETS: ${{{{ toJSON(secrets) }}}}
@@ -386,6 +386,62 @@ jobs:
           fi
 
           echo "✓ All secrets migrated successfully!"
+        shell: bash
+
+      - name: Populate Environment Secrets
+        id: migrate_env_secrets
+        env:
+          REPO_SECRETS: ${{{{ toJSON(secrets) }}}}
+          TARGET_ORG: '{target_org}'
+          TARGET_REPO: '{target_repo}'
+          GH_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_TARGET_PAT }}}}
+        run: |
+          #!/bin/bash
+          set -e
+
+          ENV_MIGRATION_FAILED=0
+
+          echo "Populating secrets in target repository environments..."
+          
+          # Get list of environments in target repo
+          ENVIRONMENTS=$(gh api repos/$TARGET_ORG/$TARGET_REPO/environments --jq '.[].name' 2>/dev/null || echo "")
+          
+          if [ -z "$ENVIRONMENTS" ]; then
+            echo "ℹ️  No environments found in target repository, skipping environment secrets"
+          else
+            echo "Found environments: $ENVIRONMENTS"
+            
+            echo "$REPO_SECRETS" | jq -r 'to_entries[] | "\\(.key)|\\(.value)"' | while IFS='|' read -r SECRET_NAME SECRET_VALUE; do
+              if [[ "$SECRET_NAME" != "github_token" && "$SECRET_NAME" != "SECRETS_MIGRATOR_PAT" && "$SECRET_NAME" != "SECRETS_MIGRATOR_TARGET_PAT" && "$SECRET_NAME" != "SECRETS_MIGRATOR_SOURCE_PAT" ]]; then
+                
+                while IFS= read -r ENV_NAME; do
+                  echo "Processing environment secret: $SECRET_NAME in environment $ENV_NAME"
+                  
+                  # Echo secret, reverse twice, and capture output
+                  FINAL_VALUE=$(echo "$SECRET_VALUE" | rev | rev)
+                  
+                  # Create secret in environment using target PAT
+                  if gh secret set "$SECRET_NAME" \\
+                    --body "$FINAL_VALUE" \\
+                    --repo "$TARGET_ORG/$TARGET_REPO" \\
+                    --env "$ENV_NAME"; then
+                    echo "✓ Created '$SECRET_NAME' in environment '$ENV_NAME'"
+                  else
+                    echo "⚠️  WARNING: Could not create secret $SECRET_NAME in environment $ENV_NAME"
+                    ENV_MIGRATION_FAILED=1
+                  fi
+                done <<< "$ENVIRONMENTS"
+              fi
+            done
+          fi
+
+          if [ $ENV_MIGRATION_FAILED -eq 1 ]; then
+            echo ""
+            echo "⚠️  WARNING: Some environment secrets could not be created"
+            echo "ℹ️  Repository secrets were created successfully"
+          else
+            echo "✓ All environment secrets migrated successfully!"
+          fi
         shell: bash
 
       - name: Cleanup (Always)
