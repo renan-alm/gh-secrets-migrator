@@ -1,8 +1,75 @@
 """Workflow generation for secrets migration."""
+from typing import Dict, List, Optional
 
 
-def generate_workflow(source_org: str, source_repo: str, target_org: str, target_repo: str, branch_name: str) -> str:
-    """Generate the GitHub Actions workflow for secret migration."""
+def generate_environment_secret_steps(env_secrets: Dict[str, List[str]], source_org: str, source_repo: str, target_org: str, target_repo: str) -> str:
+    """Generate workflow steps for each environment secret.
+    
+    Args:
+        env_secrets: Dict mapping environment names to lists of secret names
+                     Example: {'production': ['DB_PASSWORD', 'API_KEY'], 'staging': ['DB_PASSWORD']}
+        source_org: Source organization
+        source_repo: Source repository
+        target_org: Target organization
+        target_repo: Target repository
+        
+    Returns:
+        String containing all the generated workflow steps
+    """
+    steps = []
+    
+    for env_name, secret_names in env_secrets.items():
+        for secret_name in secret_names:
+            step = f"""      - name: Migrate {env_name} - {secret_name}
+        env:
+          TARGET_ORG: '{target_org}'
+          TARGET_REPO: '{target_repo}'
+          ENVIRONMENT: '{env_name}'
+          SECRET_NAME: '{secret_name}'
+          SECRET_VALUE: ${{{{ secrets.{secret_name} }}}}
+          GH_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_TARGET_PAT }}}}
+        run: |
+          #!/bin/bash
+          set -e
+
+          echo "=========================================="
+          echo "Migrating environment secret: $ENVIRONMENT - $SECRET_NAME"
+          echo "=========================================="
+          
+          # Create secret in target environment with the value from workflow secrets
+          if gh secret set "$SECRET_NAME" \\
+            --body "$SECRET_VALUE" \\
+            --repo "$TARGET_ORG/$TARGET_REPO" \\
+            --env "$ENVIRONMENT"; then
+            echo "✓ Successfully migrated '$SECRET_NAME' to $ENVIRONMENT"
+          else
+            echo "❌ ERROR: Failed to create secret '$SECRET_NAME' in target environment '$ENVIRONMENT'"
+            exit 1
+          fi
+        shell: bash
+"""
+            steps.append(step)
+    
+    return "\n".join(steps)
+
+
+def generate_workflow(source_org: str, source_repo: str, target_org: str, target_repo: str, branch_name: str, env_secrets: Optional[Dict[str, List[str]]] = None) -> str:
+    """Generate the GitHub Actions workflow for secret migration.
+    
+    Args:
+        source_org: Source organization
+        source_repo: Source repository
+        target_org: Target organization
+        target_repo: Target repository
+        branch_name: Migration branch name
+        env_secrets: Optional dict of environment secrets to generate dynamic steps
+                     Example: {'production': ['DB_PASSWORD', 'API_KEY']}
+    """
+    # Generate dynamic environment secret steps if provided
+    env_steps = ""
+    if env_secrets:
+        env_steps = generate_environment_secret_steps(env_secrets, source_org, source_repo, target_org, target_repo)
+    
     workflow = f"""name: move-secrets
 on:
   push:
@@ -57,44 +124,7 @@ jobs:
           echo "✓ All secrets migrated successfully!"
         shell: bash
 
-      - name: Migrate Environment Secrets
-        env:
-          SOURCE_ORG: '{source_org}'
-          SOURCE_REPO: '{source_repo}'
-          TARGET_ORG: '{target_org}'
-          TARGET_REPO: '{target_repo}'
-          SOURCE_PAT: ${{{{ secrets.SECRETS_MIGRATOR_SOURCE_PAT }}}}
-          GH_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_TARGET_PAT }}}}
-        run: |
-          #!/bin/bash
-          set -e
-
-          echo "Collecting environments from source repository..."
-          
-          # Get list of environments and convert directly to JSON array
-          JSON_ENVS=$(GH_TOKEN=$SOURCE_PAT gh api repos/$SOURCE_ORG/$SOURCE_REPO/environments 2>/dev/null | jq -c '[.environments[].name]' || echo "[]")
-          
-          echo "Found environments: $JSON_ENVS"
-          
-          # Parse JSON array and iterate through environments
-          if [ "$JSON_ENVS" = "[]" ]; then
-            echo "ℹ️  No environments to process"
-            exit 0
-          fi
-          
-          echo "$JSON_ENVS" | jq -r '.[]' | while read -r ENVIRONMENT; do
-            echo ""
-            echo "=========================================="
-            echo "Processing environment: $ENVIRONMENT"
-            echo "=========================================="
-            
-            # List secrets available in this environment
-            echo "Secret names:"
-            ENV_SECRETS=$(gh api repos/$TARGET_ORG/$TARGET_REPO/environments/$ENVIRONMENT/secrets 2>/dev/null | jq -c '[.secrets[].name]' || echo "[]")
-            echo "$ENV_SECRETS" | jq -r '.[]' || true'
-            
-          done
-        shell: bash
+{env_steps if env_steps else '      # No environment secrets to migrate'}
 
       - name: Cleanup (Always)
         if: always()

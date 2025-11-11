@@ -144,3 +144,50 @@ class GitHubClient:
         except Exception as e:
             self.log.debug(f"Failed to list environments with secret count: {e}")
             return {}
+
+    def list_environment_secrets(self, org: str, repo: str, environment_name: str) -> List[str]:
+        """List all secret names in a specific environment.
+        
+        Args:
+            org: Organization name
+            repo: Repository name
+            environment_name: Environment name
+            
+        Returns:
+            List of secret names in the environment
+        """
+        try:
+            repository = self.client.get_repo(f"{org}/{repo}")
+            env_obj = repository.get_environment(environment_name)
+            env_secrets_obj = env_obj.get_secrets()
+            secret_names = [secret.name for secret in env_secrets_obj]
+            return secret_names
+        except Exception as e:
+            self.log.debug(f"Could not fetch secrets for environment '{environment_name}': {e}")
+            return []
+
+    def list_all_environments_with_secrets(self, org: str, repo: str) -> dict:
+        """List all environments with their secret names.
+        
+        Returns a dictionary mapping environment names to lists of secret names.
+        Example: {'production': ['DB_PASSWORD', 'API_KEY'], 'staging': ['DB_PASSWORD']}
+        """
+        try:
+            repository = self.client.get_repo(f"{org}/{repo}")
+            env_info = {}
+            
+            for env in repository.get_environments():
+                secret_names = []
+                try:
+                    env_obj = repository.get_environment(env.name)
+                    env_secrets_obj = env_obj.get_secrets()
+                    secret_names = [secret.name for secret in env_secrets_obj]
+                except Exception as e:
+                    self.log.debug(f"Could not fetch secrets for environment '{env.name}': {e}")
+                
+                env_info[env.name] = secret_names
+            
+            return env_info
+        except Exception as e:
+            self.log.debug(f"Failed to list environments with secrets: {e}")
+            return {}

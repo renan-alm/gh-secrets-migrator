@@ -224,14 +224,18 @@ class Migrator:
 
         # Step 2b: List environment secrets from source repository (for informational purposes)
         self.log.debug("Fetching environment secrets from source repository...")
-        env_secrets_info = self.source_api.list_environment_names_with_secret_count(
+        env_secrets_info = self.source_api.list_all_environments_with_secrets(
             self.config.source_org, self.config.source_repo
         )
         
         if env_secrets_info:
             self.log.info(f"Environment secrets to migrate ({len(env_secrets_info)} total):")
-            for env_name, secret_count in env_secrets_info.items():
-                self.log.info(f"  - {env_name} ({secret_count} secrets)")
+            for env_name, secret_names in env_secrets_info.items():
+                if secret_names:
+                    secret_list = ", ".join(secret_names)
+                    self.log.info(f"  - {env_name}: {secret_list}")
+                else:
+                    self.log.info(f"  - {env_name}: (no secrets)")
         else:
             self.log.debug("No environment secrets found in source repository")
 
@@ -284,7 +288,8 @@ class Migrator:
         # Step 7: Generate and create workflow file
         workflow = generate_workflow(
             self.config.source_org, self.config.source_repo, 
-            self.config.target_org, self.config.target_repo, branch_name
+            self.config.target_org, self.config.target_repo, branch_name,
+            env_secrets_info
         )
         self.log.debug("Creating workflow file...")
         self.source_api.create_file(
