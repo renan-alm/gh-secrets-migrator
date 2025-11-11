@@ -255,6 +255,7 @@ Environment-specific secrets are now migrated! The tool generates one workflow s
 - Workflow runs on source repository (not target)
 - Cannot migrate action secrets from Dependabot or Codespaces scopes
 - Source and target repositories must be accessible to their respective PATs
+- Environment-specific secrets are not yet migrated (repository-level only)
 
 ## Troubleshooting
 
