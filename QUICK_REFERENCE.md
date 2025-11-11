@@ -1,150 +1,133 @@
-# Quick Reference: Testing & CI/CD
+# Quick Reference: Development & Testing
 
 ## Run Commands
 
-### Local Testing
+### Development Setup
+
 ```bash
-make test              # Full test suite with coverage
-make test-verbose      # Show detailed output
-make test-race         # Check for race conditions
-make test-bench        # Run benchmarks
-make coverage          # Generate HTML coverage report
-make coverage-report   # Print coverage %
+make install           # Install dependencies
+make dev              # Install with dev dependencies (includes linters/testing)
 ```
 
 ### Code Quality
+
 ```bash
-make fmt               # Format code
-make vet               # Run go vet
-make lint              # Run linters
-make mod-tidy          # Tidy dependencies
-make all               # Format + vet + lint + test + build
+make format           # Format code with black
+make lint             # Run flake8 and pylint checks
 ```
 
-### Build & Release
+### Testing
+
 ```bash
-make build             # Build binary
-make build-all         # Build for all platforms
-make clean             # Remove build artifacts
-make install           # Build and install
+make test             # Run test suite with pytest
 ```
 
-## GitHub Actions Workflows
+### Cleanup
 
-| Workflow | Trigger | Purpose |
-|----------|---------|---------|
-| test.yml | Push to main/develop, PRs | Run tests on Go 1.23 & 1.24 |
-| lint.yml | Push to main/develop, PRs | Check code quality |
-| release.yml | Push tags (v*) | Build & release binaries |
-
-## Test Files
-
-| File | Tests | Coverage |
-|------|-------|----------|
-| internal/logger/logger_test.go | 10 | Logger functionality |
-| internal/migrator/migrator_test.go | 7 + 1 benchmark | Config & performance |
-
-## Key Files
-
-```
-.github/workflows/test.yml          Multi-version testing
-.github/workflows/lint.yml          Code quality checks
-.github/workflows/release.yml       Automated releases
-.golangci.yml                       14 enabled linters
-Makefile                            Development commands
-TESTING.md                          Testing guide
-CI_CD.md                            Pipeline docs
+```bash
+make clean            # Remove build artifacts, cache, pyc files
 ```
 
-## Test Best Practices Used
+## Project Structure
 
-✅ Table-driven tests
-✅ Subtests with t.Run()
-✅ Race detector enabled
-✅ Coverage tracking
-✅ Benchmarks included
-✅ Clear test naming
-✅ Test isolation
-✅ Multiple Go versions
+```text
+src/
+├── core/              # Business logic
+│   ├── config.py      # Configuration container
+│   ├── migrator.py    # Main orchestration logic
+│   └── workflow_generator.py  # GitHub Actions workflow generation
+├── clients/
+│   └── github.py      # GitHub API wrapper
+├── cli/
+│   └── commands.py    # CLI interface with Click
+└── utils/
+    └── logger.py      # Logging utility
+
+main.py               # Entry point
+requirements.txt      # Dependencies
+Makefile             # Development commands
+```
+
+## Key Features
+
+- ✅ Migrates repository secrets from source to target
+- ✅ Recreates environments in target repository
+- ✅ Generates dynamic GitHub Actions workflow
+- ✅ One workflow step per environment secret
+- ✅ Automatic cleanup of temporary secrets
+- ✅ PAT permission validation
+- ✅ Comprehensive logging with verbose mode
 
 ## Before Committing
 
 ```bash
-# Local pre-commit check
-make all
+# Format code
+make format
 
-# Or step by step
-make fmt               # Fix formatting
-make vet               # Check with vet
-make lint              # Fix linting issues
-make test              # Verify tests pass
+# Check linting
+make lint
+
+# Run tests (if configured)
+make test
+
+# Clean up artifacts
+make clean
 ```
 
-## Creating a Release
+## CLI Usage
 
 ```bash
-# 1. Update version info
-# 2. Update RELEASENOTES.md
-# 3. Commit changes
-git add .
-git commit -m "Release v1.0.0"
-
-# 4. Create tag
-git tag v1.0.0
-
-# 5. Push
-git push origin v1.0.0
-
-# ✅ GitHub Actions automatically:
-#    - Runs all tests
-#    - Builds for all platforms
-#    - Creates GitHub release
-#    - Publishes binaries
+python main.py \
+  --source-org <org> \
+  --source-repo <repo> \
+  --target-org <org> \
+  --target-repo <repo> \
+  --source-pat <token> \
+  --target-pat <token> \
+  [--verbose] \
+  [--skip-envs]
 ```
 
-## Coverage Goals
+### Options
 
-- Minimum: 50% (enforced)
-- Target: 70%
-- Ideal: 85%
+- `--verbose` - Enable debug logging
+- `--skip-envs` - Skip environment recreation (default: recreate)
 
-Check: `make coverage-report`
+### Environment Variable
+
+- `GITHUB_TOKEN` - Fallback for both source and target PATs (if not explicitly provided)
+
+## How It Works
+
+1. **Validate** PAT permissions
+2. **Recreate** environments (unless `--skip-envs`)
+3. **List** secrets from source
+4. **Create** temporary secrets in source (for workflow access)
+5. **Generate** dynamic workflow steps
+6. **Workflow runs** - migrates each secret to target environment
+7. **Cleanup** - deletes temporary secrets and branch
 
 ## Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
-| Tests fail | `make test-verbose` |
-| Linting errors | `make lint` |
-| Format issues | `make fmt` |
-| Build fails | `make clean && make build` |
+| Import errors | `make install` to ensure dependencies installed |
+| Linting errors | `make lint` to check; `make format` to fix |
+| Workflow fails | Check GitHub Actions tab in source repo |
+| Permission denied | Verify PAT scopes (repo + workflow required) |
 
-## Workflows Summary
+## Dependencies
 
-### 1. Test Workflow
-- ✅ Go 1.23 & 1.24
-- ✅ Race detector
-- ✅ Coverage → Codecov
-- ✅ Caching
+See `requirements.txt`:
 
-### 2. Lint Workflow
-- ✅ golangci-lint (14 linters)
-- ✅ go vet
-- ✅ go fmt
-- ✅ go mod tidy
-
-### 3. Release Workflow
-- ✅ Tests first
-- ✅ 5 platform builds
-- ✅ GitHub release
-- ✅ Checksums
+- PyGithub - GitHub API client
+- Click - CLI framework
+- requests - HTTP library
 
 ## Success Indicators
 
-✅ All tests pass
-✅ Coverage > 50%
-✅ No linting errors
-✅ Code formatted
-✅ Builds successful
-
-You're ready! Push with confidence! 🚀
+- ✅ Code formatted correctly
+- ✅ No linting errors
+- ✅ All commands execute without errors
+- ✅ Workflow file generated successfully
+- ✅ Tests pass (when configured)

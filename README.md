@@ -170,13 +170,12 @@ python main.py \
 
 ```bash
 make install       # Install dependencies
-make dev          # Install with dev dependencies
-make lint         # Run linting checks
+make dev          # Install with dev dependencies (includes linters/testing)
+make lint         # Run linting checks (flake8 + pylint)
 make format       # Format code with black
-make test         # Run tests
-make run          # Run the migrator (requires arguments)
-make clean        # Clean build artifacts
-make help         # Show help
+make test         # Run tests with pytest
+make clean        # Clean build artifacts, cache, .pyc files
+make help         # Show all available commands
 ```
 
 ## Configuration
@@ -240,9 +239,14 @@ The tool automatically recreates all environments from the source repository in 
 ✅ Environment recreation completed!
 ```
 
-### Future: Environment-Specific Secrets
+### Environment-Specific Secrets
 
-This is a stepping stone for future functionality to migrate environment-specific secrets. Currently, only repository-level secrets are migrated.
+Environment-specific secrets are now migrated! The tool generates one workflow step per environment-secret combination:
+
+- Lists all environment secrets from the source repository
+- Creates dynamic workflow steps for each secret
+- Each step migrates that specific secret to the target environment
+- Secrets are created using the values already available in the workflow context
 
 ## Limitations
 
@@ -251,7 +255,6 @@ This is a stepping stone for future functionality to migrate environment-specifi
 - Workflow runs on source repository (not target)
 - Cannot migrate action secrets from Dependabot or Codespaces scopes
 - Source and target repositories must be accessible to their respective PATs
-- Environment-specific secrets are not yet migrated (repository-level only)
 
 ## Troubleshooting
 
