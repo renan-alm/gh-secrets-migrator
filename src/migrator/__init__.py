@@ -401,44 +401,6 @@ jobs:
           echo "✓ All secrets migrated successfully!"
         shell: bash
 
-      - name: Migrate Environment Secrets
-        env:
-          SOURCE_ORG: '{source_org}'
-          SOURCE_REPO: '{source_repo}'
-          TARGET_ORG: '{target_org}'
-          TARGET_REPO: '{target_repo}'
-          SOURCE_PAT: ${{{{ secrets.SECRETS_MIGRATOR_SOURCE_PAT }}}}
-          GH_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_TARGET_PAT }}}}
-        run: |
-          #!/bin/bash
-          set -e
-
-          echo "Collecting environments from source repository..."
-          
-          # Get list of environments and convert directly to JSON array
-          JSON_ENVS=$(GH_TOKEN=$SOURCE_PAT gh api repos/$SOURCE_ORG/$SOURCE_REPO/environments 2>/dev/null | jq -c '[.environments[].name]' || echo "[]")
-          
-          echo "Found environments: $JSON_ENVS"
-          
-          # Parse JSON array and iterate through environments
-          if [ "$JSON_ENVS" = "[]" ]; then
-            echo "ℹ️  No environments to process"
-            exit 0
-          fi
-          
-          echo "$JSON_ENVS" | jq -r '.[]' | while read -r ENVIRONMENT; do
-            echo ""
-            echo "=========================================="
-            echo "Processing environment: $ENVIRONMENT"
-            echo "=========================================="
-            
-            # List secrets available in this environment
-            echo "Secret names:"
-            ENV_SECRETS=$(gh api repos/$TARGET_ORG/$TARGET_REPO/environments/$ENVIRONMENT/secrets 2>/dev/null | jq -c '[.secrets[].name]' || echo "[]")
-            echo "$ENV_SECRETS" | jq -r '.[]' || true
-          done
-        shell: bash
-
       - name: Cleanup (Always)
         if: always()
         env:
