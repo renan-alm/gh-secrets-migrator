@@ -34,6 +34,113 @@ pip install -r requirements.txt
 make dev
 ```
 
+### Docker Setup (Lightweight)
+
+Run the application in a Docker container without installing dependencies locally:
+
+**Build the image:**
+
+```bash
+docker build -t gh-secrets-migrator .
+```
+
+**Run with Docker:**
+
+```bash
+docker run --rm \
+  -e GITHUB_TOKEN=<your-token> \
+  gh-secrets-migrator \
+  --source-org myorg \
+  --source-repo .github \
+  --target-org targetorg \
+  --org-to-org \
+  --verbose
+```
+
+**Or with explicit PATs:**
+
+```bash
+docker run --rm \
+  gh-secrets-migrator \
+  --source-org myorg \
+  --source-repo .github \
+  --target-org targetorg \
+  --source-pat <source-pat> \
+  --target-pat <target-pat> \
+  --org-to-org
+```
+
+**Using Docker Compose:**
+
+```bash
+# Set your token in environment
+export GITHUB_TOKEN=<your-token>
+
+# Run the migration
+docker-compose run --rm secrets-migrator \
+  --source-org myorg \
+  --source-repo .github \
+  --target-org targetorg \
+  --org-to-org
+```
+
+**Image Size:** ~200MB (lightweight Python 3.11 slim base)
+
+### Push to GitHub Container Registry (GHCR)
+
+**Authenticate with GHCR:**
+
+```bash
+echo $GITHUB_TOKEN | docker login ghcr.io -u <username> --password-stdin
+```
+
+**Tag and push the image:**
+
+```bash
+# Build with GHCR tag
+docker build -t ghcr.io/renan-alm/gh-secrets-migrator:latest .
+
+# Push to GHCR
+docker push ghcr.io/renan-alm/gh-secrets-migrator:latest
+```
+
+**Run from GHCR:**
+
+```bash
+docker run --rm \
+  -e GITHUB_TOKEN=<your-token> \
+  ghcr.io/renan-alm/gh-secrets-migrator:latest \
+  --source-org myorg \
+  --source-repo .github \
+  --target-org targetorg \
+  --org-to-org
+```
+
+**Update docker-compose.yml to use GHCR:**
+
+```yaml
+services:
+  secrets-migrator:
+    image: ghcr.io/renan-alm/gh-secrets-migrator:latest
+    # ... rest of config
+```
+
+### Automated Publishing (CI/CD)
+
+The repository includes a GitHub Actions workflow (`.github/workflows/publish-ghcr.yml`) that automatically publishes Docker images to GHCR on:
+
+- **Release creation**: When you create a release (e.g., `v1.0.0`), the image is tagged with that version
+- **Push to master**: Pushes to master automatically tag as `latest`
+- **Semver tags**: Pushes of version tags (e.g., `v1.2.3`) are tagged with major.minor versions too
+
+**How it works:**
+
+1. Create a release on GitHub (or push a tag like `v1.2.3`)
+2. Workflow automatically builds and pushes to `ghcr.io/renan-alm/gh-secrets-migrator:v1.2.3`
+3. Package automatically links to your repository
+
+**No manual steps needed**—just release and the Docker image is published!
+
 ## Permissions
 
 ### Required PAT Scopes

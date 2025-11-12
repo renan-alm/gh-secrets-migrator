@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  secrets-migrator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock  # If needed for other integrations
+    restart: "no"
+    # Override with your command, e.g.:
+    # command: --source-org myorg --source-repo repo --target-org targetorg --target-repo target
