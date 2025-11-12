@@ -15,8 +15,13 @@ class Migrator:
         self.source_api = GitHubClient(config.source_pat, logger)
         self.target_api = GitHubClient(config.target_pat, logger)
 
-    def _get_workflow_run_url(self, branch_name: str) -> str:
-        """Get the URL of the workflow run triggered by the push to the migration branch."""
+    def _get_workflow_run_url(self, branch_name: str, workflow_name: str = "migrate-secrets.yml") -> str:
+        """Get the URL of the workflow run triggered by the push to the migration branch.
+        
+        Args:
+            branch_name: The branch that triggered the workflow
+            workflow_name: The workflow file name (default: migrate-secrets.yml)
+        """
         try:
             repo = self.source_api.client.get_repo(
                 f"{self.config.source_org}/{self.config.source_repo}"
@@ -24,13 +29,13 @@ class Migrator:
             
             # Try to get workflow by name
             try:
-                workflow = repo.get_workflow("migrate-secrets.yml")
+                workflow = repo.get_workflow(workflow_name)
             except Exception:
-                # If workflow not found by name, try by ID or get first workflow
+                # If workflow not found by name, try by searching in all workflows
                 workflows = repo.get_workflows()
                 workflow = None
                 for w in workflows:
-                    if "migrate-secrets" in w.name:
+                    if workflow_name.replace(".yml", "") in w.name:
                         workflow = w
                         break
                 if not workflow:
@@ -318,21 +323,12 @@ class Migrator:
             )
             self.log.info(f"✓ Workflow pushed to branch '{branch_name}'")
             
-            # Step 4: Wait for workflow to complete
-            self.log.info("Waiting for workflow to execute...")
-            time.sleep(3)  # Give workflow time to start
+            # Step 4: Workflow is now running asynchronously - provide URL for monitoring
+            self.log.success("✓ Workflow triggered successfully!")
             
-            workflow_url = self._get_workflow_run_url(branch_name)
-            if workflow_url:
-                self.log.info(f"View workflow progress: {workflow_url}")
-            
-            # Step 5: Wait for completion (with timeout)
-            max_wait = 300  # 5 minutes
-            start_time = time.time()
-            while time.time() - start_time < max_wait:
-                time.sleep(5)
-            
-            self.log.success("✓ Organization secret migration workflow completed!")
+            workflow_url = f"https://github.com/{self.config.source_org}/{self.config.source_repo}/actions/workflows/migrate-org-secrets.yml"
+            self.log.success("✓ Organization secret migration started! Check the link below to monitor progress.")
+            self.log.info(f"Monitor workflow progress here: {workflow_url}")
             
         except RuntimeError:
             raise
