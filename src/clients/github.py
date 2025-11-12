@@ -191,3 +191,55 @@ class GitHubClient:
         except Exception as e:
             self.log.debug(f"Failed to list environments with secrets: {e}")
             return {}
+
+    def list_org_secrets(self, org: str) -> List[str]:
+        """List all secrets in the organization.
+        
+        Args:
+            org: Organization name
+            
+        Returns:
+            List of secret names in the organization
+        """
+        try:
+            organization = self.client.get_organization(org)
+            secrets = organization.get_secrets()
+            secret_names = [secret.name for secret in secrets]
+            self.log.debug(f"Found {len(secret_names)} organization secrets in {org}")
+            return secret_names
+        except Exception as e:
+            self.log.debug(f"Failed to list organization secrets: {e}")
+            raise RuntimeError(f"Failed to list organization secrets: {e}")
+
+    def create_org_secret(self, org: str, secret_name: str, secret_value: str) -> None:
+        """Create or update a secret in the organization.
+        
+        Args:
+            org: Organization name
+            secret_name: Name of the secret
+            secret_value: Value of the secret
+        """
+        try:
+            organization = self.client.get_organization(org)
+            # PyGithub handles encryption automatically
+            organization.create_secret(secret_name, secret_value)
+            self.log.debug(f"Created/updated organization secret {secret_name} in {org}")
+        except Exception as e:
+            self.log.error(f"Failed to create/update organization secret {secret_name}: {type(e).__name__}: {e}")
+            raise RuntimeError(f"Failed to create/update organization secret {secret_name}: {e}")
+
+    def delete_org_secret(self, org: str, secret_name: str) -> None:
+        """Delete a secret from the organization.
+        
+        Args:
+            org: Organization name
+            secret_name: Name of the secret to delete
+        """
+        try:
+            organization = self.client.get_organization(org)
+            secret = organization.get_secret(secret_name)
+            secret.delete()
+            self.log.debug(f"Deleted organization secret {secret_name} from {org}")
+        except Exception as e:
+            self.log.error(f"Failed to delete organization secret {secret_name}: {type(e).__name__}: {e}")
+            raise RuntimeError(f"Failed to delete organization secret {secret_name}: {e}")

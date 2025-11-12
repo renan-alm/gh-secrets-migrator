@@ -15,8 +15,13 @@ class Migrator:
         self.source_api = GitHubClient(config.source_pat, logger)
         self.target_api = GitHubClient(config.target_pat, logger)
 
-    def _get_workflow_run_url(self, branch_name: str) -> str:
-        """Get the URL of the workflow run triggered by the push to the migration branch."""
+    def _get_workflow_run_url(self, branch_name: str, workflow_name: str = "migrate-secrets.yml") -> str:
+        """Get the URL of the workflow run triggered by the push to the migration branch.
+        
+        Args:
+            branch_name: The branch that triggered the workflow
+            workflow_name: The workflow file name (default: migrate-secrets.yml)
+        """
         try:
             repo = self.source_api.client.get_repo(
                 f"{self.config.source_org}/{self.config.source_repo}"
@@ -24,13 +29,13 @@ class Migrator:
             
             # Try to get workflow by name
             try:
-                workflow = repo.get_workflow("migrate-secrets.yml")
+                workflow = repo.get_workflow(workflow_name)
             except Exception:
-                # If workflow not found by name, try by ID or get first workflow
+                # If workflow not found by name, try by searching in all workflows
                 workflows = repo.get_workflows()
                 workflow = None
                 for w in workflows:
-                    if "migrate-secrets" in w.name:
+                    if workflow_name.replace(".yml", "") in w.name:
                         workflow = w
                         break
                 if not workflow:
@@ -180,14 +185,181 @@ class Migrator:
             self.log.error(f"Unexpected error during environment recreation: {type(e).__name__}: {e}")
             raise RuntimeError(f"Failed to recreate environments: {e}")
 
+    def _validate_org_permissions(self) -> None:
+        """Validate that both PATs have necessary permissions for organization access."""
+        try:
+            # Check source PAT permissions
+            self.log.debug("Checking source PAT permissions for organization access...")
+            try:
+                source_org = self.source_api.client.get_organization(self.config.source_org)
+                self.log.debug(f"✓ Source PAT has access to organization '{self.config.source_org}'")
+                
+                # Try to list org secrets to verify permission
+                secrets = source_org.get_secrets()
+                _ = list(secrets)  # Force evaluation
+                self.log.debug("✓ Source PAT has permission to access organization secrets")
+            except Exception as source_error:
+                error_msg = str(source_error)
+                if "404" in error_msg or "Not Found" in error_msg:
+                    raise RuntimeError(
+                        f"Source organization '{self.config.source_org}' not found.\n"
+                        f"Please verify the organization name is correct."
+                    )
+                elif "401" in error_msg or "Unauthorized" in error_msg:
+                    raise RuntimeError(
+                        f"Source PAT does not have access to organization '{self.config.source_org}'.\n"
+                        f"Please verify your source PAT has the necessary permissions."
+                    )
+                else:
+                    raise RuntimeError(f"Failed to access source organization: {source_error}")
+
+            # Check target PAT permissions
+            self.log.debug("Checking target PAT permissions for organization access...")
+            try:
+                target_org = self.target_api.client.get_organization(self.config.target_org)
+                self.log.debug(f"✓ Target PAT has access to organization '{self.config.target_org}'")
+                
+                # Try to list org secrets to verify permission
+                secrets = target_org.get_secrets()
+                _ = list(secrets)  # Force evaluation
+                self.log.debug("✓ Target PAT has permission to access organization secrets")
+            except Exception as target_error:
+                error_msg = str(target_error)
+                if "404" in error_msg or "Not Found" in error_msg:
+                    raise RuntimeError(
+                        f"Target organization '{self.config.target_org}' not found.\n"
+                        f"Please verify the organization name is correct."
+                    )
+                elif "401" in error_msg or "Unauthorized" in error_msg:
+                    raise RuntimeError(
+                        f"Target PAT does not have access to organization '{self.config.target_org}'.\n"
+                        f"Please verify your target PAT has the necessary permissions."
+                    )
+                else:
+                    raise RuntimeError(f"Failed to access target organization: {target_error}")
+
+            self.log.success("✓ Both PATs have necessary organization permissions")
+
+        except RuntimeError:
+            raise
+        except Exception as e:
+            self.log.error(f"Unexpected error during permission validation: {type(e).__name__}: {e}")
+            raise RuntimeError(f"Failed to validate organization permissions: {e}")
+
+    def _migrate_org_secrets_workflow(self) -> None:
+        """Migrate organization secrets using GitHub Actions workflow.
+        
+        Org-to-org migration requires a source repository to host the workflow.
+        If target repo is not provided, uses the same name as source repo.
+        """
+        self.log.info("Fetching organization secrets from source...")
+        
+        try:
+            # Use source repo for workflow hosting, target repo defaults to source if not provided
+            source_repo = self.config.source_repo
+            target_repo = self.config.target_repo or self.config.source_repo
+            
+            # Get list of org secrets from source
+            org_secret_names = self.source_api.list_org_secrets(self.config.source_org)
+            
+            # Filter out system secrets
+            secrets_to_migrate = [
+                name for name in org_secret_names
+                if name not in ("SECRETS_MIGRATOR_PAT", "SECRETS_MIGRATOR_TARGET_PAT", "SECRETS_MIGRATOR_SOURCE_PAT")
+            ]
+            
+            if not secrets_to_migrate:
+                self.log.info("No organization secrets to migrate (found only system secrets)")
+                return
+            
+            self.log.info(f"Organization secrets to migrate ({len(secrets_to_migrate)} total):")
+            for name in secrets_to_migrate:
+                self.log.info(f"  - {name}")
+            
+            branch_name = "migrate-org-secrets"
+            
+            # Step 1: Create temporary secrets in source repo
+            self.log.info("Creating temporary secrets in source repository...")
+            self.source_api.create_repo_secret(
+                self.config.source_org, source_repo,
+                "SECRETS_MIGRATOR_TARGET_PAT", self.config.target_pat
+            )
+            self.source_api.create_repo_secret(
+                self.config.source_org, source_repo,
+                "SECRETS_MIGRATOR_SOURCE_PAT", self.config.source_pat
+            )
+            
+            # Step 2: Generate workflow with org secrets
+            self.log.info("Generating workflow for organization secret migration...")
+            workflow_content = generate_workflow(
+                self.config.source_org, source_repo,
+                self.config.target_org, target_repo,
+                branch_name,
+                env_secrets=None,
+                org_secrets=secrets_to_migrate
+            )
+            
+            # Step 3: Create migration branch and push workflow
+            self.log.info(f"Creating migration branch '{branch_name}'...")
+            source_repo_obj = self.source_api.client.get_repo(f"{self.config.source_org}/{source_repo}")
+            
+            # Get default branch
+            default_branch = source_repo_obj.default_branch
+            base_ref = source_repo_obj.get_git_ref(f"heads/{default_branch}")
+            
+            # Create new branch
+            source_repo_obj.create_git_ref(f"refs/heads/{branch_name}", base_ref.object.sha)
+            self.log.debug(f"✓ Created migration branch '{branch_name}'")
+            
+            # Create workflow file
+            workflow_path = ".github/workflows/migrate-org-secrets.yml"
+            self.log.debug(f"Creating workflow file at {workflow_path}...")
+            
+            source_repo_obj.create_file(
+                workflow_path,
+                f"chore: add organization secrets migration workflow",
+                workflow_content,
+                branch=branch_name
+            )
+            self.log.info(f"✓ Workflow pushed to branch '{branch_name}'")
+            
+            # Step 4: Workflow is now running asynchronously - provide URL for monitoring
+            self.log.success("✓ Workflow triggered successfully!")
+            
+            workflow_url = f"https://github.com/{self.config.source_org}/{self.config.source_repo}/actions/workflows/migrate-org-secrets.yml"
+            self.log.success("✓ Organization secret migration started! Check the link below to monitor progress.")
+            self.log.info(f"Monitor workflow progress here: {workflow_url}")
+            
+        except RuntimeError:
+            raise
+        except Exception as e:
+            self.log.error(f"Error during organization secret migration: {type(e).__name__}: {e}")
+            raise RuntimeError(f"Failed to migrate organization secrets: {e}")
 
     def run(self) -> None:
         """Execute the migration process."""
         self.log.info("Migrating Secrets...")
+        
+        # Handle org-to-org migration
+        if self.config.org_to_org:
+            self.log.info(f"SOURCE ORG: {self.config.source_org}")
+            self.log.info(f"TARGET ORG: {self.config.target_org}")
+            self.log.info("Mode: Organization-to-Organization (org secrets only)")
+            
+            # Validate PAT permissions for org access
+            self.log.info("Validating PAT permissions...")
+            self._validate_org_permissions()
+            
+            # Attempt org-only migration
+            self._migrate_org_secrets_workflow()
+            return
+        
+        # Handle repo-to-repo migration (original flow)
         self.log.info(f"SOURCE ORG: {self.config.source_org}")
         self.log.info(f"SOURCE REPO: {self.config.source_repo}")
         self.log.info(f"TARGET ORG: {self.config.target_org}")
         self.log.info(f"TARGET REPO: {self.config.target_repo}")
+        self.log.info("Mode: Repository-to-Repository")
 
         # Validate PAT permissions
         self.log.info("Validating PAT permissions...")
@@ -326,3 +498,4 @@ class Migrator:
                 f"Secrets migration workflow triggered!\n"
                 f"View progress: https://github.com/{self.config.source_org}/{self.config.source_repo}/actions?query=branch%3Amigrate-secrets"
             )
+

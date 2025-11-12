@@ -15,7 +15,7 @@ from src.core.config import MigrationConfig
 @click.option(
     "--source-repo",
     required=True,
-    help="Source repository name"
+    help="Source repository name (required for both repo-to-repo and org-to-org migrations)"
 )
 @click.option(
     "--target-org",
@@ -24,8 +24,9 @@ from src.core.config import MigrationConfig
 )
 @click.option(
     "--target-repo",
-    required=True,
-    help="Target repository name"
+    required=False,
+    default="",
+    help="Target repository name (required for repo-to-repo migration, optional for org-to-org)"
 )
 @click.option(
     "--source-pat",
@@ -47,9 +48,41 @@ from src.core.config import MigrationConfig
     is_flag=True,
     help="Skip environment recreation (by default environments are recreated)"
 )
-def migrate(source_org, source_repo, target_org, target_repo, source_pat, target_pat, verbose, skip_envs):
-    """Migrate GitHub secrets from one repository to another."""
+@click.option(
+    "--org-to-org",
+    is_flag=True,
+    help="Migrate organization secrets only (ignores repo and environment secrets)"
+)
+def migrate(source_org, source_repo, target_org, target_repo, source_pat, target_pat, verbose, skip_envs, org_to_org):
+    """Migrate GitHub secrets from one organization/repository to another.
+    
+    Two modes of operation:
+    - Repository to Repository: Migrates repo and environment secrets
+    - Organization to Organization: Migrates only organization-level secrets (use --org-to-org flag)
+    """
     logger = Logger(verbose=verbose)
+
+    # Validate source-repo is always provided (required for workflow execution)
+    if not source_repo:
+        logger.error("source-repo is required for both repo-to-repo and org-to-org migrations")
+        logger.error("The migration workflow must run in a source repository")
+        raise SystemExit(1)
+
+    # Validate modes
+    if org_to_org:
+        # For org-to-org: source-repo required, target-repo optional (defaults to source-repo name)
+        logger.info("Organization-to-Organization mode: org secrets only")
+        logger.info(f"Source repository (for workflow): {source_repo}")
+        logger.info(f"Target repository: {target_repo if target_repo else source_repo}")
+    else:
+        # For repo-to-repo: both repos required
+        if not target_repo:
+            logger.error("target-repo is required for repo-to-repo migration")
+            logger.error("(or use --org-to-org flag for organization-to-organization migration)")
+            raise SystemExit(1)
+        logger.info("Repository-to-Repository mode")
+        logger.info(f"Source: {source_org}/{source_repo}")
+        logger.info(f"Target: {target_org}/{target_repo}")
 
     # Check for GITHUB_TOKEN environment variable
     github_token = os.getenv("GITHUB_TOKEN")
@@ -75,7 +108,8 @@ def migrate(source_org, source_repo, target_org, target_repo, source_pat, target
             source_pat=source_pat_value,
             target_pat=target_pat_value,
             verbose=verbose,
-            skip_envs=skip_envs
+            skip_envs=skip_envs,
+            org_to_org=org_to_org
         )
 
         migrator = Migrator(config, logger)
@@ -87,3 +121,4 @@ def migrate(source_org, source_repo, target_org, target_repo, source_pat, target
     except Exception as e:
         logger.error(f"Unexpected error: {type(e).__name__}: {e}")
         raise SystemExit(1)
+
