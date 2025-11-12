@@ -112,19 +112,37 @@ To migrate only organization-level secrets (ignoring repository and environment 
 ```bash
 python main.py \
   --source-org <source-org> \
+  --source-repo <source-repo> \
   --target-org <target-org> \
   --source-pat <source-pat> \
   --target-pat <target-pat> \
   --org-to-org
 ```
 
-**Note:** This requires `--source-repo` and `--target-repo` to be provided as well for the workflow execution context, but only organization-level secrets will be migrated. Repository and environment-specific secrets will be ignored.
+**Note:**
+
+- Source repository is **required** to host the migration workflow
+- Target repository is optional; if not provided, defaults to the same name as source repo
+- Only organization-level secrets are migrated; repository and environment secrets are ignored
+
+**Example:**
 
 ```bash
 python main.py \
   --source-org myorg \
-  --target-org targetorg \
   --source-repo .github \
+  --target-org targetorg \
+  --org-to-org \
+  --verbose
+```
+
+**With explicit target repository:**
+
+```bash
+python main.py \
+  --source-org myorg \
+  --source-repo .github \
+  --target-org targetorg \
   --target-repo .github \
   --org-to-org \
   --verbose
@@ -208,9 +226,12 @@ make help         # Show all available commands
 ### Required Flags
 
 - `--source-org`: Source organization name
-- `--source-repo`: Source repository name
+- `--source-repo`: Source repository name (**always required** - migration workflow runs in this repository)
 - `--target-org`: Target organization name
-- `--target-repo`: Target repository name
+
+### Conditionally Required Flags
+
+- `--target-repo`: Target repository name (required for repo-to-repo migration; optional for org-to-org, defaults to source-repo name if not provided)
 
 ### Optional Flags
 
@@ -218,6 +239,7 @@ make help         # Show all available commands
 - `--target-pat`: Target PAT (required if GITHUB_TOKEN not set)
 - `--verbose`: Enable verbose logging (shows debug messages)
 - `--skip-envs`: Skip environment recreation (by default environments are recreated)
+- `--org-to-org`: Migrate only organization-level secrets (requires `--org-to-org` flag, ignores repo and env secrets)
 
 ### Environment Variables
 
@@ -275,12 +297,11 @@ Environment-specific secrets are now migrated! The tool generates one workflow s
 
 ## Limitations
 
-- Requires repo-level secrets (cannot migrate organization-level secrets)
 - Both source and target PATs must have appropriate scopes
 - Workflow runs on source repository (not target)
 - Cannot migrate action secrets from Dependabot or Codespaces scopes
 - Source and target repositories must be accessible to their respective PATs
-- Environment-specific secrets are not yet migrated (repository-level only)
+- For org-to-org migration: only organization-level secrets are migrated (repo and environment secrets are excluded)
 
 ## Troubleshooting
 

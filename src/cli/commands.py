@@ -14,9 +14,8 @@ from src.core.config import MigrationConfig
 )
 @click.option(
     "--source-repo",
-    required=False,
-    default="",
-    help="Source repository name (required for repo-to-repo migration)"
+    required=True,
+    help="Source repository name (required for both repo-to-repo and org-to-org migrations)"
 )
 @click.option(
     "--target-org",
@@ -27,7 +26,7 @@ from src.core.config import MigrationConfig
     "--target-repo",
     required=False,
     default="",
-    help="Target repository name (required for repo-to-repo migration)"
+    help="Target repository name (required for repo-to-repo migration, optional for org-to-org)"
 )
 @click.option(
     "--source-pat",
@@ -63,15 +62,27 @@ def migrate(source_org, source_repo, target_org, target_repo, source_pat, target
     """
     logger = Logger(verbose=verbose)
 
+    # Validate source-repo is always provided (required for workflow execution)
+    if not source_repo:
+        logger.error("source-repo is required for both repo-to-repo and org-to-org migrations")
+        logger.error("The migration workflow must run in a source repository")
+        raise SystemExit(1)
+
     # Validate modes
     if org_to_org:
-        if source_repo or target_repo:
-            logger.warn("--org-to-org flag is set; repository names will be ignored")
+        # For org-to-org: source-repo required, target-repo optional (defaults to source-repo name)
+        logger.info("Organization-to-Organization mode: org secrets only")
+        logger.info(f"Source repository (for workflow): {source_repo}")
+        logger.info(f"Target repository: {target_repo if target_repo else source_repo}")
     else:
-        if not source_repo or not target_repo:
-            logger.error("source-repo and target-repo are required for repo-to-repo migration")
+        # For repo-to-repo: both repos required
+        if not target_repo:
+            logger.error("target-repo is required for repo-to-repo migration")
             logger.error("(or use --org-to-org flag for organization-to-organization migration)")
             raise SystemExit(1)
+        logger.info("Repository-to-Repository mode")
+        logger.info(f"Source: {source_org}/{source_repo}")
+        logger.info(f"Target: {target_org}/{target_repo}")
 
     # Check for GITHUB_TOKEN environment variable
     github_token = os.getenv("GITHUB_TOKEN")

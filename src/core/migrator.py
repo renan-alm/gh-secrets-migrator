@@ -241,14 +241,19 @@ class Migrator:
             self.log.error(f"Unexpected error during permission validation: {type(e).__name__}: {e}")
             raise RuntimeError(f"Failed to validate organization permissions: {e}")
 
-    def _migrate_org_secrets_direct(self) -> None:
-        """Directly migrate organization secrets without using GitHub Actions workflow.
+    def _migrate_org_secrets_workflow(self) -> None:
+        """Migrate organization secrets using GitHub Actions workflow.
         
-        This is used for org-to-org migration since there's no repository to host a workflow.
+        Org-to-org migration requires a source repository to host the workflow.
+        If target repo is not provided, uses the same name as source repo.
         """
         self.log.info("Fetching organization secrets from source...")
         
         try:
+            # Use source repo for workflow hosting, target repo defaults to source if not provided
+            source_repo = self.config.source_repo
+            target_repo = self.config.target_repo or self.config.source_repo
+            
             # Get list of org secrets from source
             org_secret_names = self.source_api.list_org_secrets(self.config.source_org)
             
@@ -266,21 +271,68 @@ class Migrator:
             for name in secrets_to_migrate:
                 self.log.info(f"  - {name}")
             
-            # For org secrets, we need to use GitHub CLI since PyGithub doesn't provide a way
-            # to read secret values (they're encrypted). The workflow approach handles this automatically.
-            # For now, we'll create a helper workflow in a temporary repository.
+            branch_name = "migrate-org-secrets"
             
-            self.log.info("Preparing to migrate organization secrets...")
-            self.log.info(f"Target organization: {self.config.target_org}")
-            
-            # Since we can't access secret values directly, we need to use a repository-based workflow
-            # We'll use a temporary approach by finding a repository to host the workflow
-            self.log.warn("Organization secret migration requires a repository to host the workflow")
-            self.log.warn("Please provide --source-repo and --target-repo for organization-to-organization migration")
-            raise RuntimeError(
-                "Organization-to-organization migration requires repository context.\n"
-                "Please provide --source-repo and --target-repo flags along with --org-to-org"
+            # Step 1: Create temporary secrets in source repo
+            self.log.info("Creating temporary secrets in source repository...")
+            self.source_api.create_repo_secret(
+                self.config.source_org, source_repo,
+                "SECRETS_MIGRATOR_TARGET_PAT", self.config.target_pat
             )
+            self.source_api.create_repo_secret(
+                self.config.source_org, source_repo,
+                "SECRETS_MIGRATOR_SOURCE_PAT", self.config.source_pat
+            )
+            
+            # Step 2: Generate workflow with org secrets
+            self.log.info("Generating workflow for organization secret migration...")
+            workflow_content = generate_workflow(
+                self.config.source_org, source_repo,
+                self.config.target_org, target_repo,
+                branch_name,
+                env_secrets=None,
+                org_secrets=secrets_to_migrate
+            )
+            
+            # Step 3: Create migration branch and push workflow
+            self.log.info(f"Creating migration branch '{branch_name}'...")
+            source_repo_obj = self.source_api.client.get_repo(f"{self.config.source_org}/{source_repo}")
+            
+            # Get default branch
+            default_branch = source_repo_obj.default_branch
+            base_ref = source_repo_obj.get_git_ref(f"heads/{default_branch}")
+            
+            # Create new branch
+            source_repo_obj.create_git_ref(f"refs/heads/{branch_name}", base_ref.object.sha)
+            self.log.debug(f"✓ Created migration branch '{branch_name}'")
+            
+            # Create workflow file
+            workflow_path = ".github/workflows/migrate-org-secrets.yml"
+            self.log.debug(f"Creating workflow file at {workflow_path}...")
+            
+            source_repo_obj.create_file(
+                workflow_path,
+                f"chore: add organization secrets migration workflow",
+                workflow_content,
+                branch=branch_name
+            )
+            self.log.info(f"✓ Workflow pushed to branch '{branch_name}'")
+            
+            # Step 4: Wait for workflow to complete
+            self.log.info("Waiting for workflow to execute...")
+            time.sleep(3)  # Give workflow time to start
+            
+            workflow_url = self._get_workflow_run_url(branch_name)
+            if workflow_url:
+                self.log.info(f"View workflow progress: {workflow_url}")
+            
+            # Step 5: Wait for completion (with timeout)
+            max_wait = 300  # 5 minutes
+            start_time = time.time()
+            while time.time() - start_time < max_wait:
+                time.sleep(5)
+            
+            self.log.success("✓ Organization secret migration workflow completed!")
             
         except RuntimeError:
             raise
@@ -303,7 +355,7 @@ class Migrator:
             self._validate_org_permissions()
             
             # Attempt org-only migration
-            self._migrate_org_secrets_direct()
+            self._migrate_org_secrets_workflow()
             return
         
         # Handle repo-to-repo migration (original flow)
