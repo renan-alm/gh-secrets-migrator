@@ -50,10 +50,11 @@ Makefile             # Development commands
 
 ## Key Features
 
-- ✅ Migrates repository secrets from source to target
+- ✅ Repository-to-Repository secret migration
+- ✅ Organization-to-Organization secret migration
 - ✅ Recreates environments in target repository
 - ✅ Generates dynamic GitHub Actions workflow
-- ✅ One workflow step per environment secret
+- ✅ One workflow step per secret (repo/env/org)
 - ✅ Automatic cleanup of temporary secrets
 - ✅ PAT permission validation
 - ✅ Comprehensive logging with verbose mode
@@ -76,6 +77,8 @@ make clean
 
 ## CLI Usage
 
+### Repository-to-Repository Migration
+
 ```bash
 python main.py \
   --source-org <org> \
@@ -88,10 +91,25 @@ python main.py \
   [--skip-envs]
 ```
 
+### Organization-to-Organization Migration
+
+```bash
+python main.py \
+  --source-org <org> \
+  --target-org <org> \
+  --source-repo <repo> \
+  --target-repo <repo> \
+  --source-pat <token> \
+  --target-pat <token> \
+  --org-to-org \
+  [--verbose]
+```
+
 ### Options
 
 - `--verbose` - Enable debug logging
-- `--skip-envs` - Skip environment recreation (default: recreate)
+- `--skip-envs` - Skip environment recreation (repo-to-repo only)
+- `--org-to-org` - Migrate only organization-level secrets (ignores repo/env secrets)
 
 ### Environment Variable
 

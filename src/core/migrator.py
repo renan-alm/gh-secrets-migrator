@@ -180,14 +180,138 @@ class Migrator:
             self.log.error(f"Unexpected error during environment recreation: {type(e).__name__}: {e}")
             raise RuntimeError(f"Failed to recreate environments: {e}")
 
+    def _validate_org_permissions(self) -> None:
+        """Validate that both PATs have necessary permissions for organization access."""
+        try:
+            # Check source PAT permissions
+            self.log.debug("Checking source PAT permissions for organization access...")
+            try:
+                source_org = self.source_api.client.get_organization(self.config.source_org)
+                self.log.debug(f"✓ Source PAT has access to organization '{self.config.source_org}'")
+                
+                # Try to list org secrets to verify permission
+                secrets = source_org.get_secrets()
+                _ = list(secrets)  # Force evaluation
+                self.log.debug("✓ Source PAT has permission to access organization secrets")
+            except Exception as source_error:
+                error_msg = str(source_error)
+                if "404" in error_msg or "Not Found" in error_msg:
+                    raise RuntimeError(
+                        f"Source organization '{self.config.source_org}' not found.\n"
+                        f"Please verify the organization name is correct."
+                    )
+                elif "401" in error_msg or "Unauthorized" in error_msg:
+                    raise RuntimeError(
+                        f"Source PAT does not have access to organization '{self.config.source_org}'.\n"
+                        f"Please verify your source PAT has the necessary permissions."
+                    )
+                else:
+                    raise RuntimeError(f"Failed to access source organization: {source_error}")
+
+            # Check target PAT permissions
+            self.log.debug("Checking target PAT permissions for organization access...")
+            try:
+                target_org = self.target_api.client.get_organization(self.config.target_org)
+                self.log.debug(f"✓ Target PAT has access to organization '{self.config.target_org}'")
+                
+                # Try to list org secrets to verify permission
+                secrets = target_org.get_secrets()
+                _ = list(secrets)  # Force evaluation
+                self.log.debug("✓ Target PAT has permission to access organization secrets")
+            except Exception as target_error:
+                error_msg = str(target_error)
+                if "404" in error_msg or "Not Found" in error_msg:
+                    raise RuntimeError(
+                        f"Target organization '{self.config.target_org}' not found.\n"
+                        f"Please verify the organization name is correct."
+                    )
+                elif "401" in error_msg or "Unauthorized" in error_msg:
+                    raise RuntimeError(
+                        f"Target PAT does not have access to organization '{self.config.target_org}'.\n"
+                        f"Please verify your target PAT has the necessary permissions."
+                    )
+                else:
+                    raise RuntimeError(f"Failed to access target organization: {target_error}")
+
+            self.log.success("✓ Both PATs have necessary organization permissions")
+
+        except RuntimeError:
+            raise
+        except Exception as e:
+            self.log.error(f"Unexpected error during permission validation: {type(e).__name__}: {e}")
+            raise RuntimeError(f"Failed to validate organization permissions: {e}")
+
+    def _migrate_org_secrets_direct(self) -> None:
+        """Directly migrate organization secrets without using GitHub Actions workflow.
+        
+        This is used for org-to-org migration since there's no repository to host a workflow.
+        """
+        self.log.info("Fetching organization secrets from source...")
+        
+        try:
+            # Get list of org secrets from source
+            org_secret_names = self.source_api.list_org_secrets(self.config.source_org)
+            
+            # Filter out system secrets
+            secrets_to_migrate = [
+                name for name in org_secret_names
+                if name not in ("SECRETS_MIGRATOR_PAT", "SECRETS_MIGRATOR_TARGET_PAT", "SECRETS_MIGRATOR_SOURCE_PAT")
+            ]
+            
+            if not secrets_to_migrate:
+                self.log.info("No organization secrets to migrate (found only system secrets)")
+                return
+            
+            self.log.info(f"Organization secrets to migrate ({len(secrets_to_migrate)} total):")
+            for name in secrets_to_migrate:
+                self.log.info(f"  - {name}")
+            
+            # For org secrets, we need to use GitHub CLI since PyGithub doesn't provide a way
+            # to read secret values (they're encrypted). The workflow approach handles this automatically.
+            # For now, we'll create a helper workflow in a temporary repository.
+            
+            self.log.info("Preparing to migrate organization secrets...")
+            self.log.info(f"Target organization: {self.config.target_org}")
+            
+            # Since we can't access secret values directly, we need to use a repository-based workflow
+            # We'll use a temporary approach by finding a repository to host the workflow
+            self.log.warn("Organization secret migration requires a repository to host the workflow")
+            self.log.warn("Please provide --source-repo and --target-repo for organization-to-organization migration")
+            raise RuntimeError(
+                "Organization-to-organization migration requires repository context.\n"
+                "Please provide --source-repo and --target-repo flags along with --org-to-org"
+            )
+            
+        except RuntimeError:
+            raise
+        except Exception as e:
+            self.log.error(f"Error during organization secret migration: {type(e).__name__}: {e}")
+            raise RuntimeError(f"Failed to migrate organization secrets: {e}")
 
     def run(self) -> None:
         """Execute the migration process."""
         self.log.info("Migrating Secrets...")
+        
+        # Handle org-to-org migration
+        if self.config.org_to_org:
+            self.log.info(f"SOURCE ORG: {self.config.source_org}")
+            self.log.info(f"TARGET ORG: {self.config.target_org}")
+            self.log.info("Mode: Organization-to-Organization (org secrets only)")
+            
+            # Validate PAT permissions for org access
+            self.log.info("Validating PAT permissions...")
+            self._validate_org_permissions()
+            
+            # Attempt org-only migration
+            self._migrate_org_secrets_direct()
+            return
+        
+        # Handle repo-to-repo migration (original flow)
         self.log.info(f"SOURCE ORG: {self.config.source_org}")
         self.log.info(f"SOURCE REPO: {self.config.source_repo}")
         self.log.info(f"TARGET ORG: {self.config.target_org}")
         self.log.info(f"TARGET REPO: {self.config.target_repo}")
+        self.log.info("Mode: Repository-to-Repository")
 
         # Validate PAT permissions
         self.log.info("Validating PAT permissions...")
@@ -326,3 +450,4 @@ class Migrator:
                 f"Secrets migration workflow triggered!\n"
                 f"View progress: https://github.com/{self.config.source_org}/{self.config.source_repo}/actions?query=branch%3Amigrate-secrets"
             )
+

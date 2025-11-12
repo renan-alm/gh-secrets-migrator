@@ -7,13 +7,14 @@ class MigrationConfig:
     def __init__(
         self,
         source_org: str,
-        source_repo: str,
         target_org: str,
-        target_repo: str,
         source_pat: str,
         target_pat: str,
+        source_repo: str = "",
+        target_repo: str = "",
         verbose: bool = False,
-        skip_envs: bool = False
+        skip_envs: bool = False,
+        org_to_org: bool = False
     ):
         self.source_org = source_org
         self.source_repo = source_repo
@@ -23,3 +24,4 @@ class MigrationConfig:
         self.target_pat = target_pat
         self.verbose = verbose
         self.skip_envs = skip_envs
+        self.org_to_org = org_to_org

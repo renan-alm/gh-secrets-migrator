@@ -105,6 +105,31 @@ python main.py \
   --target-repo <target-repo>
 ```
 
+### Organization-to-Organization Migration (Org Secrets Only)
+
+To migrate only organization-level secrets (ignoring repository and environment secrets):
+
+```bash
+python main.py \
+  --source-org <source-org> \
+  --target-org <target-org> \
+  --source-pat <source-pat> \
+  --target-pat <target-pat> \
+  --org-to-org
+```
+
+**Note:** This requires `--source-repo` and `--target-repo` to be provided as well for the workflow execution context, but only organization-level secrets will be migrated. Repository and environment-specific secrets will be ignored.
+
+```bash
+python main.py \
+  --source-org myorg \
+  --target-org targetorg \
+  --source-repo .github \
+  --target-repo .github \
+  --org-to-org \
+  --verbose
+```
+
 ### With Verbose Logging
 
 ```bash

@@ -53,7 +53,59 @@ def generate_environment_secret_steps(env_secrets: Dict[str, List[str]], source_
     return "\n".join(steps)
 
 
-def generate_workflow(source_org: str, source_repo: str, target_org: str, target_repo: str, branch_name: str, env_secrets: Optional[Dict[str, List[str]]] = None) -> str:
+def generate_org_secret_steps(org_secrets: List[str], target_org: str) -> str:
+    """Generate workflow steps for each organization secret.
+    
+    Args:
+        org_secrets: List of organization secret names
+                     Example: ['DB_PASSWORD', 'API_KEY', 'DEPLOY_TOKEN']
+        target_org: Target organization
+        
+    Returns:
+        String containing all the generated workflow steps
+    """
+    steps = []
+    
+    for secret_name in org_secrets:
+        step = f"""      - name: Migrate Org Secret - {secret_name}
+        env:
+          TARGET_ORG: '{target_org}'
+          SECRET_NAME: '{secret_name}'
+          SECRET_VALUE: ${{{{ secrets.{secret_name} }}}}
+          GH_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_TARGET_PAT }}}}
+        run: |
+          #!/bin/bash
+          set -e
+
+          echo "=========================================="
+          echo "Migrating organization secret: $SECRET_NAME"
+          echo "=========================================="
+          
+          # Create secret in target organization with the value from workflow secrets
+          if gh secret set "$SECRET_NAME" \\
+            --body "$SECRET_VALUE" \\
+            --org "$TARGET_ORG"; then
+            echo "✓ Successfully migrated '$SECRET_NAME' to organization '$TARGET_ORG'"
+          else
+            echo "❌ ERROR: Failed to create secret '$SECRET_NAME' in target organization '$TARGET_ORG'"
+            exit 1
+          fi
+        shell: bash
+"""
+        steps.append(step)
+    
+    return "\n".join(steps)
+
+
+def generate_workflow(
+    source_org: str, 
+    source_repo: str, 
+    target_org: str, 
+    target_repo: str, 
+    branch_name: str, 
+    env_secrets: Optional[Dict[str, List[str]]] = None,
+    org_secrets: Optional[List[str]] = None
+) -> str:
     """Generate the GitHub Actions workflow for secret migration.
     
     Args:
@@ -64,24 +116,15 @@ def generate_workflow(source_org: str, source_repo: str, target_org: str, target
         branch_name: Migration branch name
         env_secrets: Optional dict of environment secrets to generate dynamic steps
                      Example: {'production': ['DB_PASSWORD', 'API_KEY']}
+        org_secrets: Optional list of organization secret names for org-to-org migration
+                     Example: ['DB_PASSWORD', 'API_KEY', 'DEPLOY_TOKEN']
     """
-    # Generate dynamic environment secret steps if provided
-    env_steps = ""
-    if env_secrets:
-        env_steps = generate_environment_secret_steps(env_secrets, source_org, source_repo, target_org, target_repo)
+    # Generate migration steps based on type
+    migration_steps = ""
     
-    workflow = f"""name: move-secrets
-on:
-  push:
-    branches: [ "{branch_name}" ]
-permissions:
-  contents: write
-  repository-projects: write
-jobs:
-  migrate-repo-secrets:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Populate Repository Secrets
+    # Repo-to-repo: include repository secrets step
+    if not org_secrets:
+        migration_steps = f"""      - name: Populate Repository Secrets
         id: migrate
         env:
           REPO_SECRETS: ${{{{ toJSON(secrets) }}}}
@@ -123,7 +166,30 @@ jobs:
 
           echo "✓ All secrets migrated successfully!"
         shell: bash
-
+"""
+    
+    # Org-to-org Migration flow
+    if org_secrets:
+        migration_steps += generate_org_secret_steps(org_secrets, target_org)
+        env_steps = ""
+    else:
+        # Environment secrets only for repo-to-repo migrations
+        env_steps = ""
+        if env_secrets:
+            env_steps = generate_environment_secret_steps(env_secrets, source_org, source_repo, target_org, target_repo)
+    
+    workflow = f"""name: move-secrets
+on:
+  push:
+    branches: [ "{branch_name}" ]
+permissions:
+  contents: write
+  repository-projects: write
+jobs:
+  migrate-repo-secrets:
+    runs-on: ubuntu-latest
+    steps:
+{migration_steps}
 {env_steps if env_steps else '      # No environment secrets to migrate'}
 
       - name: Cleanup (Always)
