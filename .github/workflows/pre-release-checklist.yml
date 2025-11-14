@@ -1,0 +1,80 @@
+name: Pre-Release Checklist
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.1.0)'
+        required: true
+        type: string
+
+jobs:
+  pre-release-checks:
+    name: Pre-Release Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate version format
+        run: |
+          VERSION=${{ github.event.inputs.version }}
+          if [[ ! $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ Invalid version format: $VERSION"
+            echo "Expected format: X.Y.Z (e.g., 1.1.0)"
+            exit 1
+          fi
+          echo "✅ Version format is valid: $VERSION"
+
+      - name: Check CHANGELOG has version entry
+        run: |
+          VERSION=${{ github.event.inputs.version }}
+          if grep -q "^## \[$VERSION\]" CHANGELOG.md; then
+            echo "✅ Version [$VERSION] found in CHANGELOG.md"
+          else
+            echo "❌ Version [$VERSION] not found in CHANGELOG.md"
+            exit 1
+          fi
+
+      - name: Check CHANGELOG has release date
+        run: |
+          VERSION=${{ github.event.inputs.version }}
+          if grep -qE "^## \[$VERSION\] - [0-9]{4}-[0-9]{2}-[0-9]{2}" CHANGELOG.md; then
+            DATE=$(grep "^## \[$VERSION\]" CHANGELOG.md | grep -oE "[0-9]{4}-[0-9]{2}-[0-9]{2}")
+            echo "✅ Release date found: $DATE"
+          else
+            echo "⚠️  Warning: Release date not in YYYY-MM-DD format"
+          fi
+
+      - name: Check for empty sections
+        run: |
+          VERSION=${{ github.event.inputs.version }}
+          
+          # Extract version section
+          SECTION=$(sed -n "/^## \[$VERSION\]/,/^## \[/p" CHANGELOG.md | head -n -1)
+          
+          # Check if any changelog content exists (more than just the header)
+          if echo "$SECTION" | grep -q "^###"; then
+            echo "✅ Changelog has content"
+          else
+            echo "❌ Changelog section appears to be empty"
+            exit 1
+          fi
+
+      - name: Verify no duplicate version tags
+        run: |
+          VERSION=${{ github.event.inputs.version }}
+          COUNT=$(grep -c "^## \[$VERSION\]" CHANGELOG.md || echo "0")
+          if [ "$COUNT" -eq 1 ]; then
+            echo "✅ Version [$VERSION] appears exactly once"
+          else
+            echo "❌ Version [$VERSION] appears $COUNT times (should be 1)"
+            exit 1
+          fi
+
+      - name: Summary
+        run: |
+          echo "✅ All pre-release checks passed!"
+          echo ""
+          echo "Ready to run: git tag -a v${{ github.event.inputs.version }} -m 'Release v${{ github.event.inputs.version }}'"
+          echo "Then: git push origin v${{ github.event.inputs.version }}"
