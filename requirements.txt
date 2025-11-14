@@ -1,4 +1,4 @@
-PyGithub==2.3.0
+PyGithub==2.8.1
 click==8.1.7
 python-dotenv==1.0.0
 pytest==7.4.3
