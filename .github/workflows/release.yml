@@ -41,7 +41,7 @@ jobs:
           
           # Extract the changelog section for this version
           # Sed pattern: find the version header and extract until the next version header or end
-          CHANGELOG_SECTION=$(awk "/^## \[$VERSION\]/,/^## \[/" CHANGELOG.md | sed '/^## \[/d; /^\[/,$d' | sed '1d;$d')
+          CHANGELOG_SECTION=$(sed -n "/^## \[$VERSION\]/,/^## \[/p" CHANGELOG.md | sed '/^\[/,$d' | sed '$d')
           
           # Write to a temporary file for release notes
           echo "$CHANGELOG_SECTION" > /tmp/release_notes.md
