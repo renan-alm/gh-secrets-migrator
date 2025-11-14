@@ -64,7 +64,7 @@ jobs:
       - name: Verify no duplicate version tags
         run: |
           VERSION=${{ github.event.inputs.version }}
-          COUNT=$(grep -c "^## \[$VERSION\]" CHANGELOG.md || echo "0")
+          COUNT=$(grep "^## \[$VERSION\]" CHANGELOG.md | wc -l)
           if [ "$COUNT" -eq 1 ]; then
             echo "✅ Version [$VERSION] appears exactly once"
           else
