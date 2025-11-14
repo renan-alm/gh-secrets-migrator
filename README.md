@@ -2,7 +2,7 @@
 
 [![Tests](https://github.com/renan-alm/gh-secrets-migrator/actions/workflows/test-and-lint.yml/badge.svg?branch=master)](https://github.com/renan-alm/gh-secrets-migrator/actions/workflows/test-and-lint.yml)
 [![Docker Build](https://github.com/renan-alm/gh-secrets-migrator/actions/workflows/publish-ghcr.yml/badge.svg?branch=master)](https://github.com/renan-alm/gh-secrets-migrator/actions/workflows/publish-ghcr.yml)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 A tool to migrate GitHub repository secrets from a source repository to a target repository using GitHub Actions workflows.
@@ -22,7 +22,7 @@ A tool to migrate GitHub repository secrets from a source repository to a target
 
 ### Prerequisites
 
-- Python 3.8+
+- Python 3.10+
 - GitHub Personal Access Tokens (PAT) with appropriate scopes (see [Permissions](#permissions) section)
 
 ### Setup
