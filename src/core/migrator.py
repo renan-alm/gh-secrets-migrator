@@ -64,7 +64,7 @@ class Migrator:
         source_info = self.source_api.get_rate_limit_info()
         target_info = self.target_api.get_rate_limit_info()
         
-        critical_threshold = 50
+        critical_threshold = 100
         wait_needed = False
         reset_in_seconds = 0
         api_name = ""
