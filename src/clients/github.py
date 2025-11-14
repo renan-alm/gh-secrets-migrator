@@ -1,4 +1,5 @@
 """GitHub API client wrapper."""
+# flake8: noqa: E501
 from typing import List
 from github import Github
 from src.utils.logger import Logger

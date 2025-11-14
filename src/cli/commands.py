@@ -53,12 +53,22 @@ from src.core.config import MigrationConfig
     is_flag=True,
     help="Migrate organization secrets only (ignores repo and environment secrets)"
 )
-def migrate(source_org, source_repo, target_org, target_repo, source_pat, target_pat, verbose, skip_envs, org_to_org):
+def migrate(
+    source_org,
+    source_repo,
+    target_org,
+    target_repo,
+    source_pat,
+    target_pat,
+    verbose,
+    skip_envs,
+    org_to_org,
+):
     """Migrate GitHub secrets from one organization/repository to another.
-    
+
     Two modes of operation:
     - Repository to Repository: Migrates repo and environment secrets
-    - Organization to Organization: Migrates only organization-level secrets (use --org-to-org flag)
+    - Organization to Organization: Migrates only org secrets (--org-to-org flag)
     """
     logger = Logger(verbose=verbose)
 
@@ -87,7 +97,10 @@ def migrate(source_org, source_repo, target_org, target_repo, source_pat, target
     # Check for GITHUB_TOKEN environment variable
     github_token = os.getenv("GITHUB_TOKEN")
     if github_token:
-        logger.info("GITHUB_TOKEN environment variable detected, using it for both source and target authentication")
+        logger.info(
+            "GITHUB_TOKEN environment variable detected, "
+            "using it for both source and target authentication"
+        )
         source_pat_value = github_token
         target_pat_value = github_token
     else:
@@ -96,7 +109,10 @@ def migrate(source_org, source_repo, target_org, target_repo, source_pat, target
 
     # Validate we have PATs for both
     if not source_pat_value or not target_pat_value:
-        logger.error("source-pat and target-pat are required (or set GITHUB_TOKEN environment variable)")
+        logger.error(
+            "source-pat and target-pat are required "
+            "(or set GITHUB_TOKEN environment variable)"
+        )
         raise SystemExit(1)
 
     try:
@@ -121,4 +137,3 @@ def migrate(source_org, source_repo, target_org, target_repo, source_pat, target
     except Exception as e:
         logger.error(f"Unexpected error: {type(e).__name__}: {e}")
         raise SystemExit(1)
-

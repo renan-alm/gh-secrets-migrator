@@ -1,4 +1,5 @@
 """Core migration logic."""
+# flake8: noqa: E501
 import time
 from src.clients.github import GitHubClient
 from src.utils.logger import Logger
@@ -195,16 +196,16 @@ class Migrator:
                     )
                 elif "401" in error_msg or "Unauthorized" in error_msg:
                     raise RuntimeError(
-                        f"Authentication failed for source repository.\n"
-                        f"The source PAT may be invalid, expired, or revoked.\n"
-                        f"Please verify your source-pat is correct."
+                        "Authentication failed for source repository.\n"
+                        "The source PAT may be invalid, expired, or revoked.\n"
+                        "Please verify your source-pat is correct."
                     )
                 elif "403" in error_msg or "Resource not accessible" in error_msg:
                     raise RuntimeError(
-                        f"Source PAT lacks permission to manage secrets.\n"
-                        f"Ensure your source PAT has these scopes:\n"
-                        f"  - 'repo' (Full control of private repositories)\n"
-                        f"  - 'workflow' (Update GitHub Action workflows)"
+                        "Source PAT lacks permission to manage secrets.\n"
+                        "Ensure your source PAT has these scopes:\n"
+                        "  - 'repo' (Full control of private repositories)\n"
+                        "  - 'workflow' (Update GitHub Action workflows)"
                     )
                 else:
                     raise RuntimeError(f"Cannot access source repository: {source_error}")
@@ -239,10 +240,10 @@ class Migrator:
                     )
                 elif "403" in error_msg or "Resource not accessible" in error_msg:
                     raise RuntimeError(
-                        f"Target PAT lacks permission to manage secrets.\n"
-                        f"Ensure your target PAT has these scopes:\n"
-                        f"  - 'repo' (Full control of private repositories)\n"
-                        f"  - 'workflow' (Update GitHub Action workflows)"
+                        "Target PAT lacks permission to manage secrets.\n"
+                        "Ensure your target PAT has these scopes:\n"
+                        "  - 'repo' (Full control of private repositories)\n"
+                        "  - 'workflow' (Update GitHub Action workflows)"
                     )
                 else:
                     raise RuntimeError(f"Cannot access target repository: {target_error}")
@@ -440,7 +441,7 @@ class Migrator:
             
             source_repo_obj.create_file(
                 workflow_path,
-                f"chore: add organization secrets migration workflow",
+                "chore: add organization secrets migration workflow",
                 workflow_content,
                 branch=branch_name
             )
@@ -596,7 +597,7 @@ class Migrator:
 
         # Step 7: Generate and create workflow file
         workflow = generate_workflow(
-            self.config.source_org, self.config.source_repo, 
+            self.config.source_org, self.config.source_repo,
             self.config.target_org, self.config.target_repo, branch_name,
             env_secrets_info
         )
@@ -637,4 +638,3 @@ class Migrator:
             )
         
         self._check_rate_limits("migration_complete")
-
