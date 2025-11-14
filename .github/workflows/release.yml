@@ -33,10 +33,66 @@ jobs:
         run: |
           pytest tests/ -v --tb=short 2>/dev/null || echo "No tests configured"
 
-      - name: Create GitHub Release Notes
-        uses: softprops/action-gh-release@v2
+      - name: Extract changelog for release
+        id: changelog
+        run: |
+          # Extract version from git tag (e.g., v1.1.0 -> 1.1.0)
+          VERSION=${GITHUB_REF#refs/tags/v}
+          
+          # Extract the changelog section for this version
+          # Sed pattern: find the version header and extract until the next version header or end
+          CHANGELOG_SECTION=$(sed -n "/^## \[$VERSION\]/,/^## \[/p" CHANGELOG.md | sed '/^\[/,$d' | sed '$d')
+          
+          # Fail if changelog extraction failed (empty content)
+          if [ -z "$CHANGELOG_SECTION" ]; then
+            echo "❌ Failed to extract changelog for version $VERSION"
+            exit 1
+          fi
+          
+          # Write to a temporary file for release notes
+          echo "$CHANGELOG_SECTION" > /tmp/release_notes.md
+          
+          # Make it available for next step (set output variable)
+          echo "notes_file=/tmp/release_notes.md" >> $GITHUB_OUTPUT
+      - name: Update Release Notes
+        uses: actions/github-script@v7
         with:
-          body_path: RELEASENOTES.md
+          script: |
+            try {
+              const fs = require('fs');
+              const body = fs.readFileSync('/tmp/release_notes.md', 'utf8');
+              
+              const releases = await github.rest.repos.listReleases({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+              });
+              
+              const tagName = context.ref.replace('refs/tags/', '');
+              const release = releases.data.find(r => r.tag_name === tagName);
+              
+              if (release) {
+                console.log(`Updating existing release: ${tagName}`);
+                await github.rest.repos.updateRelease({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  release_id: release.id,
+                  body: body,
+                });
+              } else {
+                console.log(`Creating new release: ${tagName}`);
+                await github.rest.repos.createRelease({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  tag_name: tagName,
+                  name: tagName,
+                  body: body,
+                  draft: false,
+                  prerelease: false,
+                });
+              }
+            } catch (error) {
+              core.setFailed(`Failed to process release: ${error.message}`);
+            }
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
