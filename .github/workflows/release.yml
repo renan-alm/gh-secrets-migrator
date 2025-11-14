@@ -46,6 +46,12 @@ jobs:
           # Write to a temporary file for release notes
           echo "$CHANGELOG_SECTION" > /tmp/release_notes.md
           
+          # Fail if release notes are empty (missing file or version not found)
+          if [ ! -s /tmp/release_notes.md ]; then
+            echo "❌ Failed to extract changelog for version $VERSION"
+            exit 1
+          fi
+          
           # Make it available for next step
           echo "changelog_path=/tmp/release_notes.md" >> $GITHUB_OUTPUT
 
