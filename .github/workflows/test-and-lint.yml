@@ -52,3 +52,19 @@ jobs:
           flags: unittests
           name: codecov-umbrella
         continue-on-error: true
+
+  All_Tests_Passed:
+    name: All Tests Passed
+    runs-on: ubuntu-latest
+    needs: test-and-lint
+    if: always()
+    steps:
+      - name: Check test results
+        run: |
+          if [ "${{ needs.test-and-lint.result }}" == "success" ]; then
+            echo "✅ All tests and checks passed!"
+            exit 0
+          else
+            echo "❌ Some tests or checks failed"
+            exit 1
+          fi
