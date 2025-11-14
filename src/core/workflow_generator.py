@@ -1,4 +1,5 @@
 """Workflow generation for secrets migration."""
+# flake8: noqa: W293
 from typing import Dict, List, Optional
 
 
