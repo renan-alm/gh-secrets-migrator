@@ -41,7 +41,9 @@ jobs:
           fi
           
           # Check that all version headers (except Unreleased) have valid date format (YYYY-MM-DD)
-          INVALID_VERSIONS=$(grep -E "^## \[[0-9]+\.[0-9]+\.[0-9]+\]" CHANGELOG.md | grep -Ev "^## \[[0-9]+\.[0-9]+\.[0-9]+\] - [0-9]{4}-[0-9]{2}-[0-9]{2}")
+          # Find all version headers that match X.Y.Z pattern but DON'T have the date format
+          INVALID_VERSIONS=$(grep "^## \[" CHANGELOG.md | grep -v "^## \[Unreleased\]" | grep -v "^## \[[0-9]\+\.[0-9]\+\.[0-9]\+\] - [0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}")
+          
           if [ -n "$INVALID_VERSIONS" ]; then
             echo "❌ Version headers with invalid date format found:"
             echo "$INVALID_VERSIONS"
