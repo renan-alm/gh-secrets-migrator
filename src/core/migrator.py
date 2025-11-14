@@ -69,7 +69,6 @@ class Migrator:
         wait_needed = False
         reset_in_seconds = 0
         apis_to_wait = []
-        api_names = ""
         
         # Check if either API is critically low
         if source_info['remaining'] >= 0 and source_info['remaining'] < critical_threshold:
@@ -92,45 +91,45 @@ class Migrator:
         if wait_needed and apis_to_wait:
             reset_in_seconds = max(reset_time for _, reset_time in apis_to_wait)
             api_names = ", ".join(name for name, _ in apis_to_wait)
-        
-        if wait_needed and reset_in_seconds > 0:
-            # Add 2 second buffer to ensure reset is complete
-            total_wait = reset_in_seconds + 2
-            self.log.info(
-                f"{api_names} rate limit will reset in ~{reset_in_seconds}s. "
-                f"Waiting to ensure stable operation...\n"
-                f"This should take approximately {total_wait} seconds."
-            )
             
-            # Sleep in chunks and show progress
-            elapsed = 0
-            while elapsed < total_wait:
-                remaining_wait = total_wait - elapsed
-                sleep_time = min(10, remaining_wait)
-                self.log.debug(
-                    f"Waiting for rate limit reset... "
-                    f"({remaining_wait}s remaining)"
+            if reset_in_seconds > 0:
+                # Add 2 second buffer to ensure reset is complete
+                total_wait = reset_in_seconds + 2
+                self.log.info(
+                    f"{api_names} rate limit will reset in ~{reset_in_seconds}s. "
+                    f"Waiting to ensure stable operation...\n"
+                    f"This should take approximately {total_wait} seconds."
                 )
-                time.sleep(sleep_time)
-                elapsed += sleep_time
-            
-            # Final check - make sure we're past the reset time
-            time.sleep(1)
-            
-            # Log new rate limits after reset
-            source_info = self.source_api.get_rate_limit_info()
-            target_info = self.target_api.get_rate_limit_info()
-            
-            if source_info['remaining'] >= 0:
-                self.log.success(
-                    f"✓ Source API rate limit reset: {source_info['remaining']}/{source_info['limit']} calls available"
-                )
-            if target_info['remaining'] >= 0:
-                self.log.success(
-                    f"✓ Target API rate limit reset: {target_info['remaining']}/{target_info['limit']} calls available"
-                )
-            
-            self.log.success("Resuming migration...")
+                
+                # Sleep in chunks and show progress
+                elapsed = 0
+                while elapsed < total_wait:
+                    remaining_wait = total_wait - elapsed
+                    sleep_time = min(10, remaining_wait)
+                    self.log.debug(
+                        f"Waiting for rate limit reset... "
+                        f"({remaining_wait}s remaining)"
+                    )
+                    time.sleep(sleep_time)
+                    elapsed += sleep_time
+                
+                # Final check - make sure we're past the reset time
+                time.sleep(1)
+                
+                # Log new rate limits after reset
+                source_info = self.source_api.get_rate_limit_info()
+                target_info = self.target_api.get_rate_limit_info()
+                
+                if source_info['remaining'] >= 0:
+                    self.log.success(
+                        f"✓ Source API rate limit reset: {source_info['remaining']}/{source_info['limit']} calls available"
+                    )
+                if target_info['remaining'] >= 0:
+                    self.log.success(
+                        f"✓ Target API rate limit reset: {target_info['remaining']}/{target_info['limit']} calls available"
+                    )
+                
+                self.log.success("Resuming migration...")
 
     def _get_workflow_run_url(self, branch_name: str, workflow_name: str = "migrate-secrets.yml") -> str:
         """Get the URL of the workflow run triggered by the push to the migration branch.
