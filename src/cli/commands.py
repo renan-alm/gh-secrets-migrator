@@ -114,6 +114,25 @@ def migrate(source_org, source_repo, target_org, target_repo, source_pat, target
 
         migrator = Migrator(config, logger)
         migrator.run()
+        
+        # Display final rate limit summary
+        source_info = migrator.source_api.get_rate_limit_info()
+        target_info = migrator.target_api.get_rate_limit_info()
+        
+        logger.info("\n" + "="*60)
+        logger.info("MIGRATION COMPLETE - Rate Limit Summary")
+        logger.info("="*60)
+        if source_info['remaining'] >= 0:
+            logger.info(
+                f"Source API: {source_info['remaining']}/{source_info['limit']} calls remaining "
+                f"(resets in ~{source_info['reset_in_seconds']}s)"
+            )
+        if target_info['remaining'] >= 0:
+            logger.info(
+                f"Target API: {target_info['remaining']}/{target_info['limit']} calls remaining "
+                f"(resets in ~{target_info['reset_in_seconds']}s)"
+            )
+        logger.info("="*60 + "\n")
 
     except RuntimeError as e:
         logger.error(str(e))

@@ -14,6 +14,117 @@ class Migrator:
         self.log = logger
         self.source_api = GitHubClient(config.source_pat, logger)
         self.target_api = GitHubClient(config.target_pat, logger)
+    
+    def _check_rate_limits(self, checkpoint: str) -> bool:
+        """Check rate limits and warn if low.
+        
+        Args:
+            checkpoint: Name of the current checkpoint for logging
+            
+        Returns:
+            True if both APIs have sufficient rate limit (>50 calls), False otherwise
+        """
+        source_info = self.source_api.get_rate_limit_info()
+        target_info = self.target_api.get_rate_limit_info()
+        
+        source_ok = source_info['remaining'] >= 0
+        target_ok = target_info['remaining'] >= 0
+        
+        if source_ok:
+            self.log.debug(
+                f"[{checkpoint}] Source: {source_info['remaining']}/{source_info['limit']} calls remaining"
+            )
+            if source_info['remaining'] < 50:
+                self.log.warn(
+                    f"⚠ Source API rate limit low: {source_info['remaining']} calls remaining! "
+                    f"(Resets in ~{source_info['reset_in_seconds']}s)"
+                )
+        
+        if target_ok:
+            self.log.debug(
+                f"[{checkpoint}] Target: {target_info['remaining']}/{target_info['limit']} calls remaining"
+            )
+            if target_info['remaining'] < 50:
+                self.log.warn(
+                    f"⚠ Target API rate limit low: {target_info['remaining']} calls remaining! "
+                    f"(Resets in ~{target_info['reset_in_seconds']}s)"
+                )
+        
+        # Return False if either API has critically low rate limit
+        return (source_info['remaining'] > 30 if source_ok else True) and \
+               (target_info['remaining'] > 30 if target_ok else True)
+    
+    def _wait_for_rate_limit_reset(self) -> None:
+        """Wait until rate limit resets if critically low (< 20 calls remaining).
+        
+        This prevents workflow creation when API calls are critically low,
+        which would result in workflow failures. Uses x-ratelimit-reset header
+        to determine exact reset time.
+        """
+        source_info = self.source_api.get_rate_limit_info()
+        target_info = self.target_api.get_rate_limit_info()
+        
+        critical_threshold = 50
+        wait_needed = False
+        reset_in_seconds = 0
+        api_name = ""
+        
+        # Check if either API is critically low
+        if source_info['remaining'] >= 0 and source_info['remaining'] < critical_threshold:
+            self.log.warn(
+                f"⚠️ CRITICAL: Source API has only {source_info['remaining']} calls remaining! "
+                f"Waiting for rate limit reset..."
+            )
+            wait_needed = True
+            reset_in_seconds = source_info['reset_in_seconds']
+            api_name = "Source"
+        elif target_info['remaining'] >= 0 and target_info['remaining'] < critical_threshold:
+            self.log.warn(
+                f"⚠️ CRITICAL: Target API has only {target_info['remaining']} calls remaining! "
+                f"Waiting for rate limit reset..."
+            )
+            wait_needed = True
+            reset_in_seconds = target_info['reset_in_seconds']
+            api_name = "Target"
+        
+        if wait_needed and reset_in_seconds > 0:
+            # Add 2 second buffer to ensure reset is complete
+            total_wait = reset_in_seconds + 2
+            self.log.info(
+                f"{api_name} rate limit will reset in ~{reset_in_seconds}s. "
+                f"Waiting to ensure stable operation...\n"
+                f"This should take approximately {total_wait} seconds."
+            )
+            
+            # Sleep in chunks and show progress
+            elapsed = 0
+            while elapsed < total_wait:
+                remaining_wait = total_wait - elapsed
+                sleep_time = min(10, remaining_wait)
+                self.log.debug(
+                    f"Waiting for rate limit reset... "
+                    f"({remaining_wait}s remaining)"
+                )
+                time.sleep(sleep_time)
+                elapsed += sleep_time
+            
+            # Final check - make sure we're past the reset time
+            time.sleep(1)
+            
+            # Log new rate limits after reset
+            source_info = self.source_api.get_rate_limit_info()
+            target_info = self.target_api.get_rate_limit_info()
+            
+            if source_info['remaining'] >= 0:
+                self.log.success(
+                    f"✓ Source API rate limit reset: {source_info['remaining']}/{source_info['limit']} calls available"
+                )
+            if target_info['remaining'] >= 0:
+                self.log.success(
+                    f"✓ Target API rate limit reset: {target_info['remaining']}/{target_info['limit']} calls available"
+                )
+            
+            self.log.success("Resuming migration...")
 
     def _get_workflow_run_url(self, branch_name: str, workflow_name: str = "migrate-secrets.yml") -> str:
         """Get the URL of the workflow run triggered by the push to the migration branch.
@@ -77,10 +188,10 @@ class Migrator:
                 if "404" in error_msg or "Not Found" in error_msg:
                     raise RuntimeError(
                         f"Source repository '{source_repo_path}' not found.\n"
-                        f"Please verify:\n"
+                        "Please verify:\n"
                         f"  - Organization name is correct: {self.config.source_org}\n"
                         f"  - Repository name is correct: {self.config.source_repo}\n"
-                        f"  - PAT has access to the repository"
+                        "  - PAT has access to the repository"
                     )
                 elif "401" in error_msg or "Unauthorized" in error_msg:
                     raise RuntimeError(
@@ -137,6 +248,18 @@ class Migrator:
                     raise RuntimeError(f"Cannot access target repository: {target_error}")
 
             self.log.success("All PAT permissions validated!")
+            
+            # Log initial rate limits
+            source_info = self.source_api.get_rate_limit_info()
+            target_info = self.target_api.get_rate_limit_info()
+            if source_info['remaining'] >= 0:
+                self.log.info(
+                    f"Source API rate limit: {source_info['remaining']}/{source_info['limit']} calls remaining"
+                )
+            if target_info['remaining'] >= 0:
+                self.log.info(
+                    f"Target API rate limit: {target_info['remaining']}/{target_info['limit']} calls remaining"
+                )
 
         except RuntimeError:
             # Re-raise our custom RuntimeErrors as-is
@@ -350,6 +473,9 @@ class Migrator:
             self.log.info("Validating PAT permissions...")
             self._validate_org_permissions()
             
+            # Check if rate limit is critically low before proceeding
+            self._wait_for_rate_limit_reset()
+            
             # Attempt org-only migration
             self._migrate_org_secrets_workflow()
             return
@@ -364,11 +490,15 @@ class Migrator:
         # Validate PAT permissions
         self.log.info("Validating PAT permissions...")
         self._validate_permissions()
+        
+        # Check if rate limit is critically low before proceeding
+        self._wait_for_rate_limit_reset()
 
         # Step 1: Recreate environments (if not skipped)
         if not self.config.skip_envs:
             self.log.info("Recreating environments...")
             self._recreate_environments()
+            self._check_rate_limits("after_env_recreation")
         else:
             self.log.info("Skipping environment recreation (--skip-envs flag set)")
 
@@ -399,6 +529,8 @@ class Migrator:
         env_secrets_info = self.source_api.list_all_environments_with_secrets(
             self.config.source_org, self.config.source_repo
         )
+        
+        self._check_rate_limits("after_listing_secrets")
         
         if env_secrets_info:
             self.log.info(f"Environment secrets to migrate ({len(env_secrets_info)} total):")
@@ -456,6 +588,11 @@ class Migrator:
             branch_name,
             master_commit_sha
         )
+        
+        self._check_rate_limits("after_branch_creation")
+
+        # Step 7: Final rate limit check before workflow creation (most critical operation)
+        self._wait_for_rate_limit_reset()
 
         # Step 7: Generate and create workflow file
         workflow = generate_workflow(
@@ -498,4 +635,6 @@ class Migrator:
                 f"Secrets migration workflow triggered!\n"
                 f"View progress: https://github.com/{self.config.source_org}/{self.config.source_repo}/actions?query=branch%3Amigrate-secrets"
             )
+        
+        self._check_rate_limits("migration_complete")
 
