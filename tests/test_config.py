@@ -1,5 +1,4 @@
 """Tests for configuration module."""
-import pytest
 from src.core.config import MigrationConfig
 
 
