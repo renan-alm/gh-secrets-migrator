@@ -1,5 +1,4 @@
 """Tests for logger module."""
-import pytest
 from src.utils.logger import Logger
 
 

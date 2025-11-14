@@ -1,5 +1,4 @@
 """Tests for workflow generation module."""
-import pytest
 from src.core.workflow_generator import (
     generate_environment_secret_steps,
     generate_org_secret_steps,
