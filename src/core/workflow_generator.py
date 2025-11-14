@@ -1,6 +1,6 @@
 """Workflow generation for secrets migration."""
 from typing import Dict, List, Optional
-
+# flake8: noqa: E501
 
 def generate_environment_secret_steps(env_secrets: Dict[str, List[str]], source_org: str, source_repo: str, target_org: str, target_repo: str) -> str:
     """Generate workflow steps for each environment secret.
