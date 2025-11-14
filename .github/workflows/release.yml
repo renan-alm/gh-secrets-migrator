@@ -84,6 +84,7 @@ jobs:
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   tag_name: tagName,
+                  name: tagName,
                   body: body,
                   draft: false,
                   prerelease: false,
