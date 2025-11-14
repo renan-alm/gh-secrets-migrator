@@ -40,12 +40,14 @@ jobs:
             exit 1
           fi
           
-          # Check for proper date format in versions (YYYY-MM-DD)
-          if grep -qE "^## \[[0-9]+\.[0-9]+\.[0-9]+\] - [0-9]{4}-[0-9]{2}-[0-9]{2}" CHANGELOG.md; then
-            echo "✅ Version headers have correct format"
-          else
-            echo "❌ Version header dates are not in YYYY-MM-DD format"
+          # Check that all version headers (except Unreleased) have valid date format (YYYY-MM-DD)
+          INVALID_VERSIONS=$(grep -E "^## \[[0-9]+\.[0-9]+\.[0-9]+\]" CHANGELOG.md | grep -Ev "^## \[[0-9]+\.[0-9]+\.[0-9]+\] - [0-9]{4}-[0-9]{2}-[0-9]{2}")
+          if [ -n "$INVALID_VERSIONS" ]; then
+            echo "❌ Version headers with invalid date format found:"
+            echo "$INVALID_VERSIONS"
             exit 1
+          else
+            echo "✅ All version headers have correct date format"
           fi
           
           # Check for description section
