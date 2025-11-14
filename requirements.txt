@@ -6,3 +6,4 @@ pytest-cov==4.1.0
 flake8==7.0.0
 mypy==1.7.1
 bandit==1.7.5
+pyinstaller==6.16.0
