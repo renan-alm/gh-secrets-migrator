@@ -51,7 +51,7 @@ jobs:
           VERSION=${{ github.event.inputs.version }}
           
           # Extract version section
-          SECTION=$(sed -n "/^## \[$VERSION\]/,/^## \[/p" CHANGELOG.md | head -n -1)
+          SECTION=$(sed -n "/^## \[$VERSION\]/,/^## \[/p" CHANGELOG.md | sed '$d')
           
           # Check if any changelog content exists (more than just the header)
           if echo "$SECTION" | grep -q "^###"; then
