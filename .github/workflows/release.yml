@@ -43,17 +43,17 @@ jobs:
           # Sed pattern: find the version header and extract until the next version header or end
           CHANGELOG_SECTION=$(sed -n "/^## \[$VERSION\]/,/^## \[/p" CHANGELOG.md | sed '/^\[/,$d' | sed '$d')
           
-          # Write to a temporary file for release notes
-          echo "$CHANGELOG_SECTION" > /tmp/release_notes.md
-          
-          # Fail if release notes are empty (missing file or version not found)
-          if [ ! -s /tmp/release_notes.md ]; then
+          # Fail if changelog extraction failed (empty content)
+          if [ -z "$CHANGELOG_SECTION" ]; then
             echo "❌ Failed to extract changelog for version $VERSION"
             exit 1
           fi
           
-          # Make it available for next step
-
+          # Write to a temporary file for release notes
+          echo "$CHANGELOG_SECTION" > /tmp/release_notes.md
+          
+          # Make it available for next step (set output variable)
+          echo "notes_file=/tmp/release_notes.md" >> $GITHUB_OUTPUT
       - name: Update Release Notes
         uses: actions/github-script@v7
         with:

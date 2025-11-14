@@ -55,12 +55,20 @@ jobs:
           # Extract version section
           SECTION=$(sed -n "/^## \[$VERSION\]/,/^## \[/p" CHANGELOG.md | sed '/^\[/,$d' | sed '$d')
           
-          # Check if any changelog content exists (more than just the header)
-          if echo "$SECTION" | grep -q "^###"; then
-            echo "✅ Changelog has content"
-          else
-            echo "❌ Changelog section appears to be empty"
+          # Check that each subsection header has at least one bullet point entry
+          EMPTY_SUBSECTIONS=0
+          while read -r header; do
+            # Find lines after the header until the next header or end of section
+            CONTENT=$(echo "$SECTION" | awk "/^$header/{flag=1;next}/^###/{if(flag){exit}}flag" | grep "^- ")
+            if [ -z "$CONTENT" ]; then
+              echo "❌ Changelog subsection '$header' has no content entries"
+              EMPTY_SUBSECTIONS=1
+            fi
+          done < <(echo "$SECTION" | grep "^###" | uniq)
+          if [ "$EMPTY_SUBSECTIONS" -eq 1 ]; then
             exit 1
+          else
+            echo "✅ Changelog has content with entries in all subsections"
           fi
 
       - name: Verify no duplicate version tags
