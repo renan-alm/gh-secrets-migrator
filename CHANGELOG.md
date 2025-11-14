@@ -21,7 +21,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI/CD workflow with automated testing across Python 3.8, 3.9, 3.10, 3.11, and 3.12
 - GitHub Actions workflow generation for automated secret migration
 - Configuration management system for handling application settings
-- Support for both explicit PAT and GITHUB_TOKEN environment variable
 
 ### Improved
 
