@@ -44,7 +44,8 @@ jobs:
           if grep -qE "^## \[[0-9]+\.[0-9]+\.[0-9]+\] - [0-9]{4}-[0-9]{2}-[0-9]{2}" CHANGELOG.md; then
             echo "✅ Version headers have correct format"
           else
-            echo "⚠️  Warning: Check version header dates are in YYYY-MM-DD format"
+            echo "❌ Version header dates are not in YYYY-MM-DD format"
+            exit 1
           fi
           
           # Check for description section
