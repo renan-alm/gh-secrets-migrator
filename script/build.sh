@@ -10,31 +10,16 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EXT_DIR="$(dirname "$SCRIPT_DIR")"
 
-# Detect current platform and architecture
+# Detect current platform
 OS=$(uname -s)
-ARCH=$(uname -m)
 
-# Map architecture names
-case "$ARCH" in
-  x86_64|amd64)
-    ARCH="amd64"
-    ;;
-  arm64|aarch64)
-    ARCH="arm64"
-    ;;
-esac
-
-# Map OS names to binary names
+# Set executable extension for Windows
 case "$OS" in
-  Darwin)
-    PLATFORM="darwin"
-    ;;
-  Linux)
-    PLATFORM="linux"
-    ;;
   MINGW*|MSYS*|CYGWIN*)
-    PLATFORM="windows"
     EXE_EXT=".exe"
+    ;;
+  Darwin|Linux)
+    EXE_EXT=""
     ;;
   *)
     echo "❌ Error: Unsupported platform: $OS" >&2
@@ -60,4 +45,3 @@ chmod +x "$BINARY_PATH"
 
 # Delegate all arguments to the binary
 exec "$BINARY_PATH" "$@"
-EOF
