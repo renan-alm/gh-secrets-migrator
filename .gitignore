@@ -80,7 +80,3 @@ Thumbs.db
 .vscode/settings.json
 
 src-old/obj/
-
-gh-secrets-migrator
-
-src/Properties/launchSettings.json
