@@ -5,12 +5,17 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
-  release:
-    name: Release
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
+  build:
+    strategy:
+      matrix:
+        runner-os: [windows-latest, ubuntu-latest, macos-latest]
+    
+    runs-on: ${{ matrix.runner-os }}
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -33,6 +38,41 @@ jobs:
         run: |
           pytest tests/ -v --tb=short 2>/dev/null || echo "No tests configured"
 
+      - name: Build artifact
+        run: |
+          python -m pip install -r requirements.txt
+          if [[ "${{ matrix.runner-os }}" == "windows-latest" ]]; then
+            make build-windows
+          elif [[ "${{ matrix.runner-os }}" == "macos-latest" ]]; then
+            make build-mac
+          else
+            make build-linux
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: artifact-${{ matrix.runner-os }}
+          path: dist/bin/
+          retention-days: 1
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    needs: [ build ]
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v6
+        with:
+          path: release_files
+          merge-multiple: true
+
       - name: Extract changelog for release
         id: changelog
         run: |
@@ -54,6 +94,7 @@ jobs:
           
           # Make it available for next step (set output variable)
           echo "notes_file=/tmp/release_notes.md" >> $GITHUB_OUTPUT
+
       - name: Update Release Notes
         uses: actions/github-script@v7
         with:
@@ -96,3 +137,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Upload artifacts to release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: /tmp/release_notes.md
+          files: release_files/*

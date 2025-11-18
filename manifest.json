@@ -1,0 +1,7 @@
+{
+  "name": "gh-secrets-migrator",
+  "description": "A tool to migrate GitHub repository secrets from a source repository to a target repository",
+  "owner": "renan-alm",
+  "executable": "gh-secrets-migrator",
+  "hooks": []
+}
