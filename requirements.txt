@@ -1,5 +1,5 @@
 PyGithub==2.8.1
-click==8.1.7
+click==8.3.1
 python-dotenv==1.0.0
 pytest==7.4.3
 pytest-cov==4.1.0
