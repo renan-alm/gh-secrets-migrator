@@ -4,7 +4,6 @@ PyInstaller spec file for GitHub Secrets Migrator
 Supports macOS, Windows, and Linux
 """
 import sys
-import platform
 from PyInstaller.utils.hooks import collect_submodules
 
 block_cipher = None
