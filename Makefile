@@ -35,31 +35,31 @@ run:
 	python main.py
 
 build:
-	mkdir -p dist/bin
+	python -c "import os; os.makedirs('dist/bin', exist_ok=True)"
 	python -m PyInstaller gh-secrets-migrator.spec --clean
-	mv dist/gh-secrets-migrator-dir/gh-secrets-migrator* dist/bin/ 2>/dev/null || true
-	rm -rf dist/gh-secrets-migrator-dir
+	python -c "import glob, shutil, os; [shutil.move(f, 'dist/bin/') for f in glob.glob('dist/gh-secrets-migrator-dir/gh-secrets-migrator*') if os.path.isfile(f)]"
+	python -c "import shutil, os; shutil.rmtree('dist/gh-secrets-migrator-dir', ignore_errors=True)"
 	@echo "✅ Build complete! Executable in dist/bin/"
 
 build-mac:
-	mkdir -p dist/bin
+	python -c "import os; os.makedirs('dist/bin', exist_ok=True)"
 	python -m PyInstaller gh-secrets-migrator.spec --clean
-	mv dist/gh-secrets-migrator-dir/gh-secrets-migrator* dist/bin/ 2>/dev/null || true
-	rm -rf dist/gh-secrets-migrator-dir
+	python -c "import glob, shutil, os; [shutil.move(f, 'dist/bin/') for f in glob.glob('dist/gh-secrets-migrator-dir/gh-secrets-migrator*') if os.path.isfile(f)]"
+	python -c "import shutil, os; shutil.rmtree('dist/gh-secrets-migrator-dir', ignore_errors=True)"
 	@echo "✅ macOS build complete (Intel + Apple Silicon)! Output: dist/bin/"
 
 build-linux:
-	mkdir -p dist/bin
+	python -c "import os; os.makedirs('dist/bin', exist_ok=True)"
 	python -m PyInstaller gh-secrets-migrator.spec --clean
-	mv dist/gh-secrets-migrator-dir/gh-secrets-migrator* dist/bin/ 2>/dev/null || true
-	rm -rf dist/gh-secrets-migrator-dir
+	python -c "import glob, shutil, os; [shutil.move(f, 'dist/bin/') for f in glob.glob('dist/gh-secrets-migrator-dir/gh-secrets-migrator*') if os.path.isfile(f)]"
+	python -c "import shutil, os; shutil.rmtree('dist/gh-secrets-migrator-dir', ignore_errors=True)"
 	@echo "✅ Linux build complete! Executable in dist/bin/"
 
 build-windows:
-	mkdir -p dist/bin
+	python -c "import os; os.makedirs('dist/bin', exist_ok=True)"
 	python -m PyInstaller gh-secrets-migrator.spec --clean
-	mv dist/gh-secrets-migrator-dir/gh-secrets-migrator* dist/bin/ 2>/dev/null || true
-	rm -rf dist/gh-secrets-migrator-dir
+	python -c "import glob, shutil, os; [shutil.move(f, 'dist/bin/') for f in glob.glob('dist/gh-secrets-migrator-dir/gh-secrets-migrator*') if os.path.isfile(f)]"
+	python -c "import shutil, os; shutil.rmtree('dist/gh-secrets-migrator-dir', ignore_errors=True)"
 	@echo "✅ Windows build complete! Executable in dist/bin/"
 
 build-onefile:

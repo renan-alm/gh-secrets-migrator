@@ -38,16 +38,23 @@ jobs:
         run: |
           pytest tests/ -v --tb=short 2>/dev/null || echo "No tests configured"
 
-      - name: Build artifact
+      - name: Build artifact (Windows)
+        if: matrix.runner-os == 'windows-latest'
         run: |
           python -m pip install -r requirements.txt
-          if [[ "${{ matrix.runner-os }}" == "windows-latest" ]]; then
-            make build-windows
-          elif [[ "${{ matrix.runner-os }}" == "macos-latest" ]]; then
-            make build-mac
-          else
-            make build-linux
-          fi
+          make build-windows
+
+      - name: Build artifact (macOS)
+        if: matrix.runner-os == 'macos-latest'
+        run: |
+          python -m pip install -r requirements.txt
+          make build-mac
+
+      - name: Build artifact (Linux)
+        if: matrix.runner-os == 'ubuntu-latest'
+        run: |
+          python -m pip install -r requirements.txt
+          make build-linux
 
       - name: Upload artifact
         uses: actions/upload-artifact@v5
