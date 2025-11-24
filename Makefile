@@ -35,32 +35,20 @@ run:
 	python main.py
 
 build:
-	python -c "import os; os.makedirs('dist/bin', exist_ok=True)"
 	python -m PyInstaller gh-secrets-migrator.spec --clean
-	python -c "import glob, shutil, os; [shutil.move(f, 'dist/bin/') for f in glob.glob('dist/gh-secrets-migrator-dir/gh-secrets-migrator*') if os.path.isfile(f)]"
-	python -c "import shutil, os; shutil.rmtree('dist/gh-secrets-migrator-dir', ignore_errors=True)"
-	@echo "✅ Build complete! Executable in dist/bin/"
+	@echo "✅ Build complete! Executable in bin/"
 
 build-mac:
-	python -c "import os; os.makedirs('dist/bin', exist_ok=True)"
 	python -m PyInstaller gh-secrets-migrator.spec --clean
-	python -c "import glob, shutil, os; [shutil.move(f, 'dist/bin/') for f in glob.glob('dist/gh-secrets-migrator-dir/gh-secrets-migrator*') if os.path.isfile(f)]"
-	python -c "import shutil, os; shutil.rmtree('dist/gh-secrets-migrator-dir', ignore_errors=True)"
-	@echo "✅ macOS build complete (Intel + Apple Silicon)! Output: dist/bin/"
+	@echo "✅ macOS build complete (Intel + Apple Silicon)! Output: bin/"
 
 build-linux:
-	python -c "import os; os.makedirs('dist/bin', exist_ok=True)"
 	python -m PyInstaller gh-secrets-migrator.spec --clean
-	python -c "import glob, shutil, os; [shutil.move(f, 'dist/bin/') for f in glob.glob('dist/gh-secrets-migrator-dir/gh-secrets-migrator*') if os.path.isfile(f)]"
-	python -c "import shutil, os; shutil.rmtree('dist/gh-secrets-migrator-dir', ignore_errors=True)"
-	@echo "✅ Linux build complete! Executable in dist/bin/"
+	@echo "✅ Linux build complete! Executable in bin/"
 
 build-windows:
-	python -c "import os; os.makedirs('dist/bin', exist_ok=True)"
 	python -m PyInstaller gh-secrets-migrator.spec --clean
-	python -c "import glob, shutil, os; [shutil.move(f, 'dist/bin/') for f in glob.glob('dist/gh-secrets-migrator-dir/gh-secrets-migrator*') if os.path.isfile(f)]"
-	python -c "import shutil, os; shutil.rmtree('dist/gh-secrets-migrator-dir', ignore_errors=True)"
-	@echo "✅ Windows build complete! Executable in dist/bin/"
+	@echo "✅ Windows build complete! Executable in bin/"
 
 build-onefile:
 	python -m PyInstaller gh-secrets-migrator-onefile.spec --clean
@@ -70,6 +58,6 @@ clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name '*.pyc' -delete
-	rm -rf build/ dist/ *.egg-info
+	rm -rf build/ *.egg-info
 
 .PHONY: help install dev lint format test run clean build build-mac build-linux build-windows build-onefile
