@@ -110,7 +110,7 @@ jobs:
           echo "notes_file=/tmp/release_notes.md" >> $GITHUB_OUTPUT
 
       - name: Update Release Notes
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             try {
