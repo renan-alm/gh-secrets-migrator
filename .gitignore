@@ -45,7 +45,6 @@ htmlcov/
 
 # Tools
 coverage.out
-gh-secrets-migrator
 
 # Output of the go coverage tool
 *.out
@@ -79,4 +78,5 @@ Thumbs.db
 .vscode/launch.json
 .vscode/settings.json
 
-src-old/obj/
+dist/*
+bin/*
