@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes yet._
 
-## [1.1.0] - 2025-11-14
+## [0.2.0] - 2025-11-14
 
 ### Added
 
@@ -36,7 +36,7 @@ _No unreleased changes yet._
 - Edge case handling in secret migration process
 - Improved error messages for better debugging
 
-## [1.0.0] - 2025-11-07
+## [0.1.0] - 2025-11-07
 
 ### Added
 
@@ -55,6 +55,6 @@ _No unreleased changes yet._
 - Support for both explicit PATs and GITHUB_TOKEN environment variable
 - Verbose logging mode for debugging
 
-[Unreleased]: https://github.com/renan-alm/gh-secrets-migrator/compare/v1.1.0...HEAD
-[1.1.0]: https://github.com/renan-alm/gh-secrets-migrator/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/renan-alm/gh-secrets-migrator/releases/tag/v1.0.0
+[Unreleased]: https://github.com/renan-alm/gh-secrets-migrator/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/renan-alm/gh-secrets-migrator/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/renan-alm/gh-secrets-migrator/releases/tag/v0.1.0
