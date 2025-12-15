@@ -62,7 +62,7 @@ jobs:
           make build-linux
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: artifact-${{ matrix.runner-os }}
           path: dist/bin/
