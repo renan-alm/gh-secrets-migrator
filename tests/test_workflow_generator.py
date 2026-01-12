@@ -113,3 +113,86 @@ class TestWorkflowGenerator:
         assert "SECRETS_MIGRATOR_TARGET_PAT" in workflow
         assert "SECRETS_MIGRATOR_SOURCE_PAT" in workflow
         assert "always()" in workflow
+
+    def test_generate_org_secret_steps_with_visibility_all(self):
+        """Test generating org secret steps with 'all' visibility."""
+        org_secrets = ["SECRET1"]
+        visibility_map = {
+            "SECRET1": {"visibility": "all", "repos": []}
+        }
+        steps = generate_org_secret_steps(org_secrets, "target-org", visibility_map)
+        assert "SECRET1" in steps
+        assert "VISIBILITY: 'all'" in steps
+        assert "--visibility" in steps
+
+    def test_generate_org_secret_steps_with_visibility_private(self):
+        """Test generating org secret steps with 'private' visibility."""
+        org_secrets = ["SECRET1"]
+        visibility_map = {
+            "SECRET1": {"visibility": "private", "repos": []}
+        }
+        steps = generate_org_secret_steps(org_secrets, "target-org", visibility_map)
+        assert "SECRET1" in steps
+        assert "VISIBILITY: 'private'" in steps
+
+    def test_generate_org_secret_steps_with_visibility_selected(self):
+        """Test generating org secret steps with 'selected' visibility."""
+        org_secrets = ["SECRET1"]
+        visibility_map = {
+            "SECRET1": {"visibility": "selected", "repos": ["repo1", "repo2"]}
+        }
+        steps = generate_org_secret_steps(org_secrets, "target-org", visibility_map)
+        assert "SECRET1" in steps
+        assert "selected repos" in steps.lower()
+        assert "repo1" in steps
+        assert "repo2" in steps
+        assert "SELECTED_REPOS" in steps
+
+    def test_generate_org_secret_steps_mixed_visibility(self):
+        """Test generating org secret steps with mixed visibility settings."""
+        org_secrets = ["SECRET1", "SECRET2", "SECRET3"]
+        visibility_map = {
+            "SECRET1": {"visibility": "all", "repos": []},
+            "SECRET2": {"visibility": "selected", "repos": ["repo1"]},
+            "SECRET3": {"visibility": "private", "repos": []}
+        }
+        steps = generate_org_secret_steps(org_secrets, "target-org", visibility_map)
+        assert "SECRET1" in steps
+        assert "SECRET2" in steps
+        assert "SECRET3" in steps
+        assert steps.count("Migrate Org Secret") == 3
+        # Check that SECRET2 has selected repos handling
+        assert "selected repos" in steps.lower()
+        assert "repo1" in steps
+
+    def test_generate_workflow_with_org_secret_visibility(self):
+        """Test generating complete workflow with org secret visibility."""
+        org_secrets = ["SECRET1", "SECRET2"]
+        visibility_map = {
+            "SECRET1": {"visibility": "all", "repos": []},
+            "SECRET2": {"visibility": "selected", "repos": ["repo1", "repo2"]}
+        }
+        workflow = generate_workflow(
+            "source-org",
+            "source-repo",
+            "target-org",
+            "target-repo",
+            "migrate-org-secrets",
+            org_secrets=org_secrets,
+            org_secret_visibility=visibility_map
+        )
+        assert "SECRET1" in workflow
+        assert "SECRET2" in workflow
+        assert "VISIBILITY: 'all'" in workflow
+        assert "selected repos" in workflow.lower()
+        assert "repo1" in workflow
+        assert "repo2" in workflow
+
+    def test_generate_org_secret_steps_no_visibility_map(self):
+        """Test generating org secret steps without visibility map (backwards compatibility)."""
+        org_secrets = ["SECRET1", "SECRET2"]
+        steps = generate_org_secret_steps(org_secrets, "target-org", None)
+        assert "SECRET1" in steps
+        assert "SECRET2" in steps
+        # Should default to 'all' visibility
+        assert "VISIBILITY: 'all'" in steps
