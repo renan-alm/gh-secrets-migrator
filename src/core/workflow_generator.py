@@ -53,13 +53,15 @@ def generate_environment_secret_steps(env_secrets: Dict[str, List[str]], source_
     return "\n".join(steps)
 
 
-def generate_org_secret_steps(org_secrets: List[str], target_org: str) -> str:
+def generate_org_secret_steps(org_secrets: List[str], target_org: str, repo_visibility_map: Optional[Dict[str, Dict]] = None) -> str:
     """Generate workflow steps for each organization secret.
     
     Args:
         org_secrets: List of organization secret names
                      Example: ['DB_PASSWORD', 'API_KEY', 'DEPLOY_TOKEN']
         target_org: Target organization
+        repo_visibility_map: Optional dict mapping secret names to their visibility settings
+                            Example: {'SECRET1': {'visibility': 'selected', 'repos': ['repo1', 'repo2']}}
         
     Returns:
         String containing all the generated workflow steps
@@ -67,25 +69,124 @@ def generate_org_secret_steps(org_secrets: List[str], target_org: str) -> str:
     steps = []
     
     for secret_name in org_secrets:
-        step = f"""      - name: Migrate Org Secret - {secret_name}
+        # Check if we have visibility information for this secret
+        visibility_info = repo_visibility_map.get(secret_name) if repo_visibility_map else None
+        
+        if visibility_info and visibility_info.get('visibility') == 'selected':
+            # Secret with selected repositories
+            repos = visibility_info.get('repos', [])
+            repos_json = ' '.join([f'"{r}"' for r in repos])
+            
+            step = f"""      - name: Migrate Org Secret - {secret_name} (selected repos)
         env:
           TARGET_ORG: '{target_org}'
           SECRET_NAME: '{secret_name}'
           SECRET_VALUE: ${{{{ secrets.{secret_name} }}}}
           GH_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_TARGET_PAT }}}}
+          SELECTED_REPOS: '{" ".join(repos)}'
         run: |
           #!/bin/bash
           set -e
 
           echo "=========================================="
-          echo "Migrating organization secret: $SECRET_NAME"
+          echo "Migrating organization secret: $SECRET_NAME (selected repositories)"
+          echo "=========================================="
+          
+          # Create secret in target organization with selected repository visibility
+          # Note: gh secret set for org doesn't support --repos directly via CLI
+          # We'll need to use GitHub API directly via gh api
+          
+          # First, get repository IDs
+          REPO_IDS=()
+          for repo in $SELECTED_REPOS; do
+            echo "Getting ID for repository: $repo"
+            repo_id=$(gh api "/repos/$TARGET_ORG/$repo" --jq '.id' 2>&1)
+            if [ $? -eq 0 ]; then
+              REPO_IDS+=($repo_id)
+              echo "✓ Found repository ID: $repo_id for $repo"
+            else
+              echo "⚠️  Warning: Repository '$repo' not found in organization '$TARGET_ORG'"
+            fi
+          done
+          
+          if [ ${{#REPO_IDS[@]}} -eq 0 ]; then
+            echo "❌ ERROR: No valid repositories found. Cannot create secret with empty repository list."
+            exit 1
+          fi
+          
+          # Build JSON array of repository IDs
+          REPO_IDS_JSON="["
+          for i in "${{!REPO_IDS[@]}}"; do
+            if [ $i -gt 0 ]; then
+              REPO_IDS_JSON+=","
+            fi
+            REPO_IDS_JSON+="${{REPO_IDS[$i]}}"
+          done
+          REPO_IDS_JSON+="]"
+          
+          echo "Creating org secret with visibility 'selected' for ${{#REPO_IDS[@]}} repositories..."
+          
+          # Get org public key for encryption
+          KEY_RESPONSE=$(gh api "/orgs/$TARGET_ORG/actions/secrets/public-key")
+          KEY_ID=$(echo "$KEY_RESPONSE" | jq -r '.key_id')
+          PUBLIC_KEY=$(echo "$KEY_RESPONSE" | jq -r '.key')
+          
+          # Encrypt the secret using libsodium (via Python one-liner)
+          ENCRYPTED_VALUE=$(python3 -c "
+import base64
+import json
+import sys
+from nacl import encoding, public
+
+secret = '''$SECRET_VALUE'''
+public_key = '''$PUBLIC_KEY'''
+
+public_key_bytes = base64.b64decode(public_key)
+sealed_box = public.SealedBox(public.PublicKey(public_key_bytes))
+encrypted = sealed_box.encrypt(secret.encode('utf-8'))
+print(base64.b64encode(encrypted).decode('utf-8'))
+")
+          
+          # Create/update the secret via API
+          gh api --method PUT "/orgs/$TARGET_ORG/actions/secrets/$SECRET_NAME" \\
+            -f encrypted_value="$ENCRYPTED_VALUE" \\
+            -f key_id="$KEY_ID" \\
+            -f visibility="selected" \\
+            -F selected_repository_ids="$REPO_IDS_JSON"
+          
+          if [ $? -eq 0 ]; then
+            echo "✓ Successfully migrated '$SECRET_NAME' to organization '$TARGET_ORG' with selected repository visibility"
+          else
+            echo "❌ ERROR: Failed to create secret '$SECRET_NAME' in target organization '$TARGET_ORG'"
+            exit 1
+          fi
+        shell: bash
+"""
+        else:
+            # Standard org secret (all or private visibility)
+            visibility = visibility_info.get('visibility', 'all') if visibility_info else 'all'
+            
+            step = f"""      - name: Migrate Org Secret - {secret_name}
+        env:
+          TARGET_ORG: '{target_org}'
+          SECRET_NAME: '{secret_name}'
+          SECRET_VALUE: ${{{{ secrets.{secret_name} }}}}
+          GH_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_TARGET_PAT }}}}
+          VISIBILITY: '{visibility}'
+        run: |
+          #!/bin/bash
+          set -e
+
+          echo "=========================================="
+          echo "Migrating organization secret: $SECRET_NAME (visibility: $VISIBILITY)"
           echo "=========================================="
           
           # Create secret in target organization with the value from workflow secrets
           if gh secret set "$SECRET_NAME" \\
             --body "$SECRET_VALUE" \\
-            --org "$TARGET_ORG"; then
-            echo "✓ Successfully migrated '$SECRET_NAME' to organization '$TARGET_ORG'"
+            --org "$TARGET_ORG" \\
+            --visibility "$VISIBILITY"; then
+            echo "✓ Successfully migrated '$SECRET_NAME' to organization '$TARGET_ORG' with visibility '$VISIBILITY'"
           else
             echo "❌ ERROR: Failed to create secret '$SECRET_NAME' in target organization '$TARGET_ORG'"
             exit 1
@@ -104,7 +205,8 @@ def generate_workflow(
     target_repo: str, 
     branch_name: str, 
     env_secrets: Optional[Dict[str, List[str]]] = None,
-    org_secrets: Optional[List[str]] = None
+    org_secrets: Optional[List[str]] = None,
+    org_secret_visibility: Optional[Dict[str, Dict]] = None
 ) -> str:
     """Generate the GitHub Actions workflow for secret migration.
     
@@ -118,6 +220,8 @@ def generate_workflow(
                      Example: {'production': ['DB_PASSWORD', 'API_KEY']}
         org_secrets: Optional list of organization secret names for org-to-org migration
                      Example: ['DB_PASSWORD', 'API_KEY', 'DEPLOY_TOKEN']
+        org_secret_visibility: Optional dict mapping secret names to visibility settings
+                              Example: {'SECRET1': {'visibility': 'selected', 'repos': ['repo1']}}
     """
     # Generate migration steps based on type
     migration_steps = ""
@@ -170,7 +274,7 @@ def generate_workflow(
     
     # Org-to-org Migration flow
     if org_secrets:
-        migration_steps += generate_org_secret_steps(org_secrets, target_org)
+        migration_steps += generate_org_secret_steps(org_secrets, target_org, org_secret_visibility)
         env_steps = ""
     else:
         # Environment secrets only for repo-to-repo migrations

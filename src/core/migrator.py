@@ -1,8 +1,10 @@
 """Core migration logic."""
 # flake8: noqa: E501
 import time
+from typing import Dict, List, Optional
 from src.clients.github import GitHubClient
 from src.utils.logger import Logger
+from src.utils.repo_list_parser import parse_repo_list_file
 from src.core.config import MigrationConfig
 from src.core.workflow_generator import generate_workflow
 
@@ -379,6 +381,9 @@ class Migrator:
         
         Org-to-org migration requires a source repository to host the workflow.
         If target repo is not provided, uses the same name as source repo.
+        
+        This method now preserves repository visibility settings from source org secrets,
+        or applies a custom repository list if provided via --repo-list flag.
         """
         self.log.info("Fetching organization secrets from source...")
         
@@ -404,6 +409,100 @@ class Migrator:
             for name in secrets_to_migrate:
                 self.log.info(f"  - {name}")
             
+            # Parse repository list if provided
+            custom_repo_list = None
+            if self.config.repo_list_file:
+                self.log.info(f"Loading repository list from: {self.config.repo_list_file}")
+                try:
+                    custom_repo_list = parse_repo_list_file(self.config.repo_list_file)
+                    self.log.info(f"Loaded {len(custom_repo_list)} repositories from file:")
+                    for repo_name in custom_repo_list:
+                        self.log.info(f"  - {repo_name}")
+                    
+                    # Validate repositories exist in target org
+                    self.log.info(f"Validating repositories exist in target organization '{self.config.target_org}'...")
+                    validation_results = self.target_api.validate_repositories_exist(
+                        self.config.target_org, custom_repo_list
+                    )
+                    
+                    missing_repos = [repo for repo, exists in validation_results.items() if not exists]
+                    if missing_repos:
+                        self.log.warn(f"⚠️  Warning: {len(missing_repos)} repositories not found in target organization:")
+                        for repo in missing_repos:
+                            self.log.warn(f"  - {repo}")
+                        self.log.warn("These repositories will be excluded from secret visibility settings.")
+                    
+                    valid_repos = [repo for repo, exists in validation_results.items() if exists]
+                    if not valid_repos:
+                        raise RuntimeError(
+                            f"None of the repositories in {self.config.repo_list_file} exist in target organization. "
+                            f"Cannot proceed with migration."
+                        )
+                    
+                    self.log.info(f"✓ {len(valid_repos)} valid repositories confirmed in target organization")
+                    
+                except (FileNotFoundError, RuntimeError) as e:
+                    self.log.error(str(e))
+                    raise RuntimeError(f"Failed to process repository list: {e}")
+            
+            # Fetch visibility settings from source organization secrets
+            self.log.info("Fetching visibility settings from source organization secrets...")
+            org_secret_visibility: Dict[str, Dict] = {}
+            
+            for secret_name in secrets_to_migrate:
+                try:
+                    details = self.source_api.get_org_secret_details(
+                        self.config.source_org, secret_name
+                    )
+                    
+                    # If custom repo list is provided, override with 'selected' visibility
+                    if custom_repo_list:
+                        org_secret_visibility[secret_name] = {
+                            'visibility': 'selected',
+                            'repos': custom_repo_list
+                        }
+                        self.log.debug(
+                            f"Secret '{secret_name}': applying custom repository list "
+                            f"({len(custom_repo_list)} repos)"
+                        )
+                    elif details['visibility'] == 'selected':
+                        # Preserve existing 'selected' visibility
+                        org_secret_visibility[secret_name] = {
+                            'visibility': 'selected',
+                            'repos': details['selected_repositories']
+                        }
+                        self.log.debug(
+                            f"Secret '{secret_name}': preserving 'selected' visibility "
+                            f"({len(details['selected_repositories'])} repos)"
+                        )
+                    else:
+                        # Preserve 'all' or 'private' visibility
+                        org_secret_visibility[secret_name] = {
+                            'visibility': details['visibility'],
+                            'repos': []
+                        }
+                        self.log.debug(
+                            f"Secret '{secret_name}': preserving '{details['visibility']}' visibility"
+                        )
+                except Exception as e:
+                    self.log.warn(
+                        f"⚠️  Could not fetch visibility for secret '{secret_name}', "
+                        f"defaulting to 'all': {e}"
+                    )
+                    org_secret_visibility[secret_name] = {
+                        'visibility': 'all' if not custom_repo_list else 'selected',
+                        'repos': custom_repo_list if custom_repo_list else []
+                    }
+            
+            self.log.info("Visibility settings summary:")
+            all_count = sum(1 for v in org_secret_visibility.values() if v['visibility'] == 'all')
+            private_count = sum(1 for v in org_secret_visibility.values() if v['visibility'] == 'private')
+            selected_count = sum(1 for v in org_secret_visibility.values() if v['visibility'] == 'selected')
+            
+            self.log.info(f"  - 'all' visibility: {all_count} secrets")
+            self.log.info(f"  - 'private' visibility: {private_count} secrets")
+            self.log.info(f"  - 'selected' visibility: {selected_count} secrets")
+            
             branch_name = "migrate-org-secrets"
             
             # Step 1: Create temporary secrets in source repo
@@ -417,14 +516,15 @@ class Migrator:
                 "SECRETS_MIGRATOR_SOURCE_PAT", self.config.source_pat
             )
             
-            # Step 2: Generate workflow with org secrets
+            # Step 2: Generate workflow with org secrets and visibility settings
             self.log.info("Generating workflow for organization secret migration...")
             workflow_content = generate_workflow(
                 self.config.source_org, source_repo,
                 self.config.target_org, target_repo,
                 branch_name,
                 env_secrets=None,
-                org_secrets=secrets_to_migrate
+                org_secrets=secrets_to_migrate,
+                org_secret_visibility=org_secret_visibility
             )
             
             # Step 3: Create migration branch and push workflow

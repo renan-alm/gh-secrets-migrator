@@ -53,6 +53,12 @@ from src.core.config import MigrationConfig
     is_flag=True,
     help="Migrate organization secrets only (ignores repo and environment secrets)"
 )
+@click.option(
+    "--repo-list",
+    type=click.Path(exists=True, readable=True),
+    default=None,
+    help="Path to file containing repository names (one per line) for org secret visibility"
+)
 def migrate(
     source_org,
     source_repo,
@@ -63,6 +69,7 @@ def migrate(
     verbose,
     skip_envs,
     org_to_org,
+    repo_list,
 ):
     """Migrate GitHub secrets from one organization/repository to another.
 
@@ -125,7 +132,8 @@ def migrate(
             target_pat=target_pat_value,
             verbose=verbose,
             skip_envs=skip_envs,
-            org_to_org=org_to_org
+            org_to_org=org_to_org,
+            repo_list_file=repo_list
         )
 
         migrator = Migrator(config, logger)

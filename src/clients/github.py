@@ -1,6 +1,6 @@
 """GitHub API client wrapper."""
 # flake8: noqa: E501
-from typing import List
+from typing import List, Dict, Optional
 from github import Github
 from src.utils.logger import Logger
 
@@ -298,3 +298,146 @@ class GitHubClient:
         except Exception as e:
             self.log.error(f"Failed to delete organization secret {secret_name}: {type(e).__name__}: {e}")
             raise RuntimeError(f"Failed to delete organization secret {secret_name}: {e}")
+
+    def get_org_secret_details(self, org: str, secret_name: str) -> Dict[str, any]:
+        """Get detailed information about an organization secret including visibility.
+        
+        Args:
+            org: Organization name
+            secret_name: Name of the secret
+            
+        Returns:
+            Dictionary with:
+            - name: Secret name
+            - visibility: 'all', 'private', or 'selected'
+            - selected_repositories: List of repository names (only if visibility='selected')
+        """
+        try:
+            organization = self.client.get_organization(org)
+            secret = organization.get_secret(secret_name)
+            
+            result = {
+                'name': secret.name,
+                'visibility': secret.visibility,
+                'selected_repositories': []
+            }
+            
+            # If visibility is 'selected', get the list of repositories
+            if secret.visibility == 'selected':
+                try:
+                    # selected_repositories returns a PaginatedList of Repository objects
+                    repos = secret.selected_repositories
+                    result['selected_repositories'] = [repo.name for repo in repos]
+                except Exception as repo_error:
+                    self.log.debug(f"Could not fetch selected repositories for secret '{secret_name}': {repo_error}")
+            
+            self._log_rate_limit(f"get_org_secret_details({org}/{secret_name})")
+            return result
+        except Exception as e:
+            self.log.error(f"Failed to get org secret details for {secret_name}: {type(e).__name__}: {e}")
+            raise RuntimeError(f"Failed to get org secret details for {secret_name}: {e}")
+
+    def create_org_secret_with_visibility(
+        self, 
+        org: str, 
+        secret_name: str, 
+        secret_value: str,
+        visibility: str = 'all',
+        selected_repo_names: Optional[List[str]] = None
+    ) -> None:
+        """Create or update an organization secret with specific visibility settings.
+        
+        Args:
+            org: Organization name
+            secret_name: Name of the secret
+            secret_value: Value of the secret
+            visibility: 'all', 'private', or 'selected' (default: 'all')
+            selected_repo_names: List of repository names (required if visibility='selected')
+        """
+        try:
+            organization = self.client.get_organization(org)
+            
+            # If visibility is 'selected', we need to get Repository objects
+            selected_repos = None
+            if visibility == 'selected':
+                if not selected_repo_names:
+                    raise ValueError("selected_repo_names is required when visibility='selected'")
+                
+                selected_repos = []
+                missing_repos = []
+                
+                for repo_name in selected_repo_names:
+                    try:
+                        repo = organization.get_repo(repo_name)
+                        selected_repos.append(repo)
+                    except Exception:
+                        missing_repos.append(repo_name)
+                        self.log.warn(f"⚠️  Repository '{repo_name}' not found in organization '{org}'")
+                
+                if missing_repos:
+                    self.log.warn(
+                        f"⚠️  Secret '{secret_name}' will not be accessible to missing repositories: "
+                        f"{', '.join(missing_repos)}"
+                    )
+                
+                if not selected_repos:
+                    raise RuntimeError(
+                        f"None of the specified repositories exist in organization '{org}'. "
+                        f"Cannot create secret '{secret_name}' with empty repository list."
+                    )
+            
+            # Create the secret with visibility settings
+            organization.create_secret(
+                secret_name=secret_name,
+                unencrypted_value=secret_value,
+                visibility=visibility,
+                selected_repositories=selected_repos if selected_repos else None
+            )
+            
+            self._log_rate_limit(f"create_org_secret_with_visibility({org}/{secret_name})")
+            
+            if visibility == 'selected' and selected_repos:
+                self.log.debug(
+                    f"Created/updated organization secret '{secret_name}' in '{org}' "
+                    f"with visibility '{visibility}' for {len(selected_repos)} repositories"
+                )
+            else:
+                self.log.debug(
+                    f"Created/updated organization secret '{secret_name}' in '{org}' "
+                    f"with visibility '{visibility}'"
+                )
+        except ValueError as ve:
+            raise RuntimeError(str(ve))
+        except RuntimeError:
+            raise
+        except Exception as e:
+            self.log.error(
+                f"Failed to create/update organization secret {secret_name} with visibility: "
+                f"{type(e).__name__}: {e}"
+            )
+            raise RuntimeError(
+                f"Failed to create/update organization secret {secret_name}: {e}"
+            )
+
+    def validate_repositories_exist(self, org: str, repo_names: List[str]) -> Dict[str, bool]:
+        """Validate that repositories exist in an organization.
+        
+        Args:
+            org: Organization name
+            repo_names: List of repository names to validate
+            
+        Returns:
+            Dictionary mapping repository names to existence status (True/False)
+        """
+        result = {}
+        organization = self.client.get_organization(org)
+        
+        for repo_name in repo_names:
+            try:
+                organization.get_repo(repo_name)
+                result[repo_name] = True
+            except Exception:
+                result[repo_name] = False
+        
+        self._log_rate_limit(f"validate_repositories_exist({org})")
+        return result
