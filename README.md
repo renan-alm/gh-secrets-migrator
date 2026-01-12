@@ -231,11 +231,15 @@ python main.py \
   --org-to-org
 ```
 
-**Note:**
+**Important Requirements:**
 
 - Source repository is **required** to host the migration workflow
 - Target repository is optional; if not provided, defaults to the same name as source repo
 - Only organization-level secrets are migrated; repository and environment secrets are ignored
+- **CRITICAL**: Organization secrets **must be shared** with the source repository for migration to work
+  - In the source organization settings, each secret must have visibility set to include the source repository
+  - If secrets are not shared, the migration will create empty secrets in the target organization
+  - This is a GitHub security feature, not a limitation of this tool
 
 **Example:**
 
@@ -259,6 +263,22 @@ python main.py \
   --org-to-org \
   --verbose
 ```
+
+#### Ensuring Organization Secrets Are Accessible
+
+For org-to-org migration to work, organization secrets must be **shared with the source repository**:
+
+1. Go to your source organization settings: `https://github.com/organizations/<source-org>/settings/secrets/actions`
+2. For each secret you want to migrate:
+   - Click on the secret name
+   - Under "Repository access", ensure the source repository is selected:
+     - Select "All repositories" to share with all repos, OR
+     - Select "Selected repositories" and add your source repository to the list
+3. Save changes
+
+**Why is this required?**
+
+GitHub Actions workflows can only access organization secrets that are explicitly shared with the repository running the workflow. This is a security feature to prevent unauthorized access to sensitive secrets. If a secret is not shared, the workflow will receive an empty value, resulting in an empty secret being created in the target organization.
 
 ### With Verbose Logging
 
@@ -413,7 +433,11 @@ Environment-specific secrets are now migrated! The tool generates one workflow s
 - Workflow runs on source repository (not target)
 - Cannot migrate action secrets from Dependabot or Codespaces scopes
 - Source and target repositories must be accessible to their respective PATs
-- For org-to-org migration: only organization-level secrets are migrated (repo and environment secrets are excluded)
+- For org-to-org migration:
+  - Only organization-level secrets are migrated (repo and environment secrets are excluded)
+  - **Organization secrets must be shared with the source repository** - GitHub Actions can only access org secrets that have been explicitly shared with the repository running the workflow
+  - Secret values cannot be retrieved via GitHub API (by design for security)
+  - Migration works by reading secrets from the workflow's `secrets` context
 
 ## Troubleshooting
 
@@ -454,6 +478,26 @@ Environment-specific secrets are now migrated! The tool generates one workflow s
 - Check workflow cleanup logs in Actions tab
 - Manually delete `SECRETS_MIGRATOR_TARGET_PAT` and `SECRETS_MIGRATOR_SOURCE_PAT` from source repo
 - Verify source PAT has delete permissions
+
+### Organization secrets are empty in target organization
+
+This issue occurs during org-to-org migration when organization secrets are not shared with the source repository:
+
+**Problem**: The workflow creates secrets in the target organization, but they have empty values.
+
+**Cause**: GitHub Actions workflows can only access organization secrets that are explicitly shared with the repository. If a secret is not shared, the workflow receives an empty value.
+
+**Solution**:
+1. Go to source organization settings: `Settings > Secrets and variables > Actions`
+2. For each secret you want to migrate:
+   - Click on the secret name
+   - Under "Repository access", select either:
+     - "All repositories" (recommended for migration), OR
+     - "Selected repositories" and add the source repository
+3. Click "Update secret"
+4. Re-run the migration workflow
+
+**Verification**: Check the workflow logs. If you see warnings like `warning: secret value is empty`, the secrets are not shared with the repository.
 
 ## Development
 
