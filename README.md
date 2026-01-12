@@ -236,6 +236,7 @@ python main.py \
 - Source repository is **required** to host the migration workflow
 - Target repository is optional; if not provided, defaults to the same name as source repo
 - Only organization-level secrets are migrated; repository and environment secrets are ignored
+- **Repository visibility settings are automatically preserved** from source organization secrets
 
 **Example:**
 
@@ -259,6 +260,63 @@ python main.py \
   --org-to-org \
   --verbose
 ```
+
+#### Organization Secret Visibility
+
+Organization secrets can have different visibility levels:
+- **`all`**: Available to all repositories in the organization
+- **`private`**: Available to all private repositories
+- **`selected`**: Available only to specific repositories
+
+The tool **automatically preserves visibility settings** from the source organization:
+- Secrets with `all` visibility → migrated with `all` visibility
+- Secrets with `private` visibility → migrated with `private` visibility
+- Secrets with `selected` visibility → migrated with the same repository list
+
+#### Custom Repository List
+
+You can override the default visibility behavior by providing a custom repository list:
+
+```bash
+python main.py \
+  --source-org myorg \
+  --source-repo .github \
+  --target-org targetorg \
+  --org-to-org \
+  --repo-list /path/to/repositories.txt \
+  --verbose
+```
+
+When `--repo-list` is provided:
+- **All organization secrets** will be set with `selected` visibility
+- Only repositories listed in the file will have access to the secrets
+- The tool validates that repositories exist in the target organization
+- Missing repositories trigger warnings but don't block migration
+
+**Repository List File Format:**
+
+```text
+# Production repositories
+api-server
+web-frontend
+mobile-app
+
+# Staging repositories  
+api-server-staging
+web-frontend-staging
+
+# DevOps tooling
+ci-cd-pipeline
+```
+
+**Rules:**
+- One repository name per line
+- Comments start with `#`
+- Empty lines are ignored
+- Only repository names (not `org/repo` format)
+- No spaces in repository names
+
+**See example:** `examples/repository-list.txt`
 
 ### With Verbose Logging
 
@@ -352,6 +410,7 @@ make help         # Show all available commands
 - `--verbose`: Enable verbose logging (shows debug messages)
 - `--skip-envs`: Skip environment recreation (by default environments are recreated)
 - `--org-to-org`: Migrate only organization-level secrets (requires `--org-to-org` flag, ignores repo and env secrets)
+- `--repo-list <path>`: Path to file containing repository names for org secret visibility (one per line). When provided with `--org-to-org`, all org secrets will be scoped to only the repositories in the list.
 
 ### Environment Variables
 

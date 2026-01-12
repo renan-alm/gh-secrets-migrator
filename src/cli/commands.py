@@ -51,13 +51,13 @@ from src.core.config import MigrationConfig
 @click.option(
     "--org-to-org",
     is_flag=True,
-    help="Migrate organization secrets only (ignores repo and environment secrets)"
+    help="Migrate organization secrets only (ignores repo and environment secrets). Preserves visibility settings."
 )
 @click.option(
     "--repo-list",
     type=click.Path(exists=True, readable=True),
     default=None,
-    help="Path to file containing repository names (one per line) for org secret visibility"
+    help="Path to file with repository names (one per line). Sets org secrets to 'selected' visibility for these repos."
 )
 def migrate(
     source_org,

@@ -1,0 +1,25 @@
+# Example Repository List File
+# 
+# This file is used with the --repo-list option to specify which repositories
+# should have access to organization secrets when migrating with --org-to-org.
+#
+# Format:
+# - One repository name per line
+# - Empty lines and lines starting with # are ignored (comments)
+# - Only the repository name (not org/repo format)
+# - No spaces or special characters in repository names
+#
+# Example:
+
+# Production repositories
+api-server
+web-frontend
+mobile-app
+
+# Staging repositories
+api-server-staging
+web-frontend-staging
+
+# DevOps tooling
+ci-cd-pipeline
+monitoring-stack
