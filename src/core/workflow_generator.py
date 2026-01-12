@@ -206,7 +206,8 @@ def generate_workflow(
     branch_name: str, 
     env_secrets: Optional[Dict[str, List[str]]] = None,
     org_secrets: Optional[List[str]] = None,
-    org_secret_visibility: Optional[Dict[str, Dict]] = None
+    org_secret_visibility: Optional[Dict[str, Dict]] = None,
+    secrets_needing_cleanup: Optional[List[str]] = None
 ) -> str:
     """Generate the GitHub Actions workflow for secret migration.
     
@@ -222,6 +223,8 @@ def generate_workflow(
                      Example: ['DB_PASSWORD', 'API_KEY', 'DEPLOY_TOKEN']
         org_secret_visibility: Optional dict mapping secret names to visibility settings
                               Example: {'SECRET1': {'visibility': 'selected', 'repos': ['repo1']}}
+        secrets_needing_cleanup: Optional list of secret names that had temporary repository access granted
+                                Example: ['SECRET1', 'SECRET2']
     """
     # Generate migration steps based on type
     migration_steps = ""
@@ -282,6 +285,20 @@ def generate_workflow(
         if env_secrets:
             env_steps = generate_environment_secret_steps(env_secrets, source_org, source_repo, target_org, target_repo)
     
+    # Generate cleanup code for temporary repository access
+    cleanup_temp_access = ""
+    if secrets_needing_cleanup:
+        cleanup_temp_access = f"""
+          echo ""
+          echo "Removing temporary repository access from org secrets..."
+"""
+        for secret_name in secrets_needing_cleanup:
+            cleanup_temp_access += f"""          echo "Removing access for secret: {secret_name}"
+          gh api --method DELETE "/orgs/$SOURCE_ORG/actions/secrets/{secret_name}/repositories/$(gh api '/repos/$SOURCE_ORG/$SOURCE_REPO' --jq '.id')" || echo "⚠️  Could not remove access (may already be removed)"
+"""
+        cleanup_temp_access += """          echo "✓ Temporary access cleanup completed"
+"""
+    
     workflow = f"""name: move-secrets
 on:
   push:
@@ -301,6 +318,8 @@ jobs:
         env:
           GH_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_SOURCE_PAT }}}}
           GITHUB_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_SOURCE_PAT }}}}
+          SOURCE_ORG: '{source_org}'
+          SOURCE_REPO: '{source_repo}'
         run: |
           #!/bin/bash
           set -e
@@ -329,7 +348,7 @@ jobs:
             echo "  - SECRETS_MIGRATOR_TARGET_PAT"
             echo "  - SECRETS_MIGRATOR_SOURCE_PAT"
           fi
-
+{cleanup_temp_access}
           echo ""
           echo "Deleting migration branch..."
           if gh api --method DELETE repos/${{{{ github.repository }}}}/git/refs/heads/{branch_name} 2>/dev/null; then

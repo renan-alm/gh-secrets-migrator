@@ -441,3 +441,55 @@ class GitHubClient:
         
         self._log_rate_limit(f"validate_repositories_exist({org})")
         return result
+
+    def add_repo_to_org_secret(self, org: str, secret_name: str, repo_name: str) -> None:
+        """Add a repository to an organization secret's selected repositories list.
+        
+        This is used to temporarily grant access to the migration workflow repository.
+        
+        Args:
+            org: Organization name
+            secret_name: Name of the secret
+            repo_name: Repository name to add
+        """
+        try:
+            organization = self.client.get_organization(org)
+            secret = organization.get_secret(secret_name)
+            repo = organization.get_repo(repo_name)
+            
+            # Add the repository to the secret
+            secret.add_repo(repo)
+            self._log_rate_limit(f"add_repo_to_org_secret({org}/{secret_name}/{repo_name})")
+            self.log.debug(f"Added repository '{repo_name}' to secret '{secret_name}' in org '{org}'")
+        except Exception as e:
+            self.log.error(
+                f"Failed to add repository '{repo_name}' to secret '{secret_name}': "
+                f"{type(e).__name__}: {e}"
+            )
+            raise RuntimeError(
+                f"Failed to add repository to secret: {e}"
+            )
+
+    def remove_repo_from_org_secret(self, org: str, secret_name: str, repo_name: str) -> None:
+        """Remove a repository from an organization secret's selected repositories list.
+        
+        This is used to clean up after temporarily granting access to the migration workflow repository.
+        
+        Args:
+            org: Organization name
+            secret_name: Name of the secret
+            repo_name: Repository name to remove
+        """
+        try:
+            organization = self.client.get_organization(org)
+            secret = organization.get_secret(secret_name)
+            repo = organization.get_repo(repo_name)
+            
+            # Remove the repository from the secret
+            secret.remove_repo(repo)
+            self._log_rate_limit(f"remove_repo_from_org_secret({org}/{secret_name}/{repo_name})")
+            self.log.debug(f"Removed repository '{repo_name}' from secret '{secret_name}' in org '{org}'")
+        except Exception as e:
+            self.log.debug(
+                f"Could not remove repository '{repo_name}' from secret '{secret_name}': {e}"
+            )

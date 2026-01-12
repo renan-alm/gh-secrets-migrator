@@ -501,6 +501,48 @@ class Migrator:
             self.log.info(f"  - 'private' visibility: {private_count} secrets")
             self.log.info(f"  - 'selected' visibility: {selected_count} secrets")
             
+            # Track which secrets need temporary access granted to source repo
+            secrets_needing_temp_access = []
+            
+            # Step 0: For secrets with 'selected' visibility, temporarily grant access to source repo
+            # so the workflow can read the secret values
+            if selected_count > 0:
+                self.log.info(
+                    f"Temporarily granting source repository '{source_repo}' access to "
+                    f"{selected_count} secrets with 'selected' visibility..."
+                )
+                for secret_name, visibility_info in org_secret_visibility.items():
+                    if visibility_info['visibility'] == 'selected':
+                        try:
+                            # Check if source_repo is already in the list
+                            source_repos_list = self.source_api.get_org_secret_details(
+                                self.config.source_org, secret_name
+                            )['selected_repositories']
+                            
+                            if source_repo not in source_repos_list:
+                                # Temporarily add source repo to the secret's selected repositories
+                                self.source_api.add_repo_to_org_secret(
+                                    self.config.source_org, secret_name, source_repo
+                                )
+                                secrets_needing_temp_access.append(secret_name)
+                                self.log.debug(
+                                    f"✓ Granted temporary access to '{secret_name}' for workflow"
+                                )
+                            else:
+                                self.log.debug(
+                                    f"✓ Repository '{source_repo}' already has access to '{secret_name}'"
+                                )
+                        except Exception as e:
+                            self.log.warn(
+                                f"⚠️  Could not grant temporary access to '{secret_name}': {e}. "
+                                f"Workflow may fail to access this secret."
+                            )
+                
+                if secrets_needing_temp_access:
+                    self.log.info(
+                        f"✓ Granted temporary access to {len(secrets_needing_temp_access)} secrets"
+                    )
+            
             branch_name = "migrate-org-secrets"
             
             # Step 1: Create temporary secrets in source repo
@@ -522,7 +564,8 @@ class Migrator:
                 branch_name,
                 env_secrets=None,
                 org_secrets=secrets_to_migrate,
-                org_secret_visibility=org_secret_visibility
+                org_secret_visibility=org_secret_visibility,
+                secrets_needing_cleanup=secrets_needing_temp_access
             )
             
             # Step 3: Create migration branch and push workflow
