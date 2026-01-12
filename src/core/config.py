@@ -1,5 +1,4 @@
 """Configuration for migration."""
-from typing import Optional
 
 
 class MigrationConfig:
@@ -15,8 +14,7 @@ class MigrationConfig:
         target_repo: str = "",
         verbose: bool = False,
         skip_envs: bool = False,
-        org_to_org: bool = False,
-        repo_list_file: Optional[str] = None
+        org_to_org: bool = False
     ):
         self.source_org = source_org
         self.source_repo = source_repo
@@ -27,4 +25,3 @@ class MigrationConfig:
         self.verbose = verbose
         self.skip_envs = skip_envs
         self.org_to_org = org_to_org
-        self.repo_list_file = repo_list_file

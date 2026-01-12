@@ -53,12 +53,6 @@ from src.core.config import MigrationConfig
     is_flag=True,
     help="Migrate organization secrets only (ignores repo and environment secrets). Preserves visibility settings."
 )
-@click.option(
-    "--repo-list",
-    type=click.Path(exists=True, readable=True),
-    default=None,
-    help="Path to file with repository names (one per line). Sets org secrets to 'selected' visibility for these repos."
-)
 def migrate(
     source_org,
     source_repo,
@@ -69,7 +63,6 @@ def migrate(
     verbose,
     skip_envs,
     org_to_org,
-    repo_list,
 ):
     """Migrate GitHub secrets from one organization/repository to another.
 
@@ -81,7 +74,10 @@ def migrate(
 
     # Validate source-repo is always provided (required for workflow execution)
     if not source_repo:
-        logger.error("source-repo is required for both repo-to-repo and org-to-org migrations as placeholder for workflow execution")
+        logger.error(
+            "source-repo is required for both repo-to-repo and org-to-org migrations "
+            "as placeholder for workflow execution"
+        )
         logger.error("The migration workflow must run in a source repository")
         raise SystemExit(1)
 
@@ -132,8 +128,7 @@ def migrate(
             target_pat=target_pat_value,
             verbose=verbose,
             skip_envs=skip_envs,
-            org_to_org=org_to_org,
-            repo_list_file=repo_list
+            org_to_org=org_to_org
         )
 
         migrator = Migrator(config, logger)

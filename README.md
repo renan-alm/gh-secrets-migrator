@@ -273,50 +273,12 @@ The tool **automatically preserves visibility settings** from the source organiz
 - Secrets with `private` visibility → migrated with `private` visibility
 - Secrets with `selected` visibility → migrated with the same repository list
 
-#### Custom Repository List
+**Repository Validation:**
 
-You can override the default visibility behavior by providing a custom repository list:
-
-```bash
-python main.py \
-  --source-org myorg \
-  --source-repo .github \
-  --target-org targetorg \
-  --org-to-org \
-  --repo-list /path/to/repositories.txt \
-  --verbose
-```
-
-When `--repo-list` is provided:
-- **All organization secrets** will be set with `selected` visibility
-- Only repositories listed in the file will have access to the secrets
-- The tool validates that repositories exist in the target organization
-- Missing repositories trigger warnings but don't block migration
-
-**Repository List File Format:**
-
-```text
-# Production repositories
-api-server
-web-frontend
-mobile-app
-
-# Staging repositories  
-api-server-staging
-web-frontend-staging
-
-# DevOps tooling
-ci-cd-pipeline
-```
-
-**Rules:**
-- One repository name per line
-- Comments start with `#`
-- Empty lines are ignored
-- Only repository names (not `org/repo` format)
-- No spaces in repository names
-
-**See example:** `examples/repository-list.txt`
+For secrets with `selected` visibility, the tool:
+- Validates that each repository in the list exists in the target organization
+- Warns about missing repositories and skips them
+- If no repositories exist in the target, falls back to `all` visibility
 
 ### With Verbose Logging
 
@@ -409,8 +371,7 @@ make help         # Show all available commands
 - `--target-pat`: Target PAT (required if GITHUB_TOKEN not set)
 - `--verbose`: Enable verbose logging (shows debug messages)
 - `--skip-envs`: Skip environment recreation (by default environments are recreated)
-- `--org-to-org`: Migrate only organization-level secrets (requires `--org-to-org` flag, ignores repo and env secrets)
-- `--repo-list <path>`: Path to file containing repository names for org secret visibility (one per line). When provided with `--org-to-org`, all org secrets will be scoped to only the repositories in the list.
+- `--org-to-org`: Migrate only organization-level secrets (ignores repo and env secrets). Automatically preserves visibility settings.
 
 ### Environment Variables
 

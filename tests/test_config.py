@@ -84,29 +84,3 @@ class TestMigrationConfig:
         assert config.verbose is True
         assert config.skip_envs is True
         assert config.org_to_org is False
-
-    def test_config_with_repo_list_file(self):
-        """Test configuration with repository list file."""
-        config = MigrationConfig(
-            source_org="source-org",
-            source_repo="source-repo",
-            target_org="target-org",
-            source_pat="test-pat",
-            target_pat="test-pat",
-            org_to_org=True,
-            repo_list_file="/path/to/repos.txt",
-        )
-        assert config.repo_list_file == "/path/to/repos.txt"
-        assert config.org_to_org is True
-
-    def test_config_without_repo_list_file(self):
-        """Test configuration without repository list file (default None)."""
-        config = MigrationConfig(
-            source_org="source-org",
-            source_repo="source-repo",
-            target_org="target-org",
-            target_repo="target-repo",
-            source_pat="test-pat",
-            target_pat="test-pat",
-        )
-        assert config.repo_list_file is None
