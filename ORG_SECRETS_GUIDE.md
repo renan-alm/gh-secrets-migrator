@@ -29,7 +29,7 @@ When a secret is not shared:
 Before running the migration, ensure all secrets are shared with your source repository:
 
 #### Step 1: Navigate to Organization Settings
-Go to: `https://github.com/organizations/<your-org>/settings/secrets/actions`
+Go to: `https://github.com/organizations/YOUR_ORG/settings/secrets/actions` (replace `YOUR_ORG` with your organization name)
 
 Or manually:
 1. Go to your organization on GitHub
