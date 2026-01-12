@@ -133,19 +133,19 @@ def generate_org_secret_steps(org_secrets: List[str], target_org: str, repo_visi
           
           # Encrypt the secret using libsodium (via Python one-liner)
           ENCRYPTED_VALUE=$(python3 -c "
-import base64
-import json
-import sys
-from nacl import encoding, public
+          import base64
+          import json
+          import sys
+          from nacl import encoding, public
 
-secret = '''$SECRET_VALUE'''
-public_key = '''$PUBLIC_KEY'''
+          secret = '''$SECRET_VALUE'''
+          public_key = '''$PUBLIC_KEY'''
 
-public_key_bytes = base64.b64decode(public_key)
-sealed_box = public.SealedBox(public.PublicKey(public_key_bytes))
-encrypted = sealed_box.encrypt(secret.encode('utf-8'))
-print(base64.b64encode(encrypted).decode('utf-8'))
-")
+          public_key_bytes = base64.b64decode(public_key)
+          sealed_box = public.SealedBox(public.PublicKey(public_key_bytes))
+          encrypted = sealed_box.encrypt(secret.encode('utf-8'))
+          print(base64.b64encode(encrypted).decode('utf-8'))
+          ")
           
           # Create/update the secret via API
           gh api --method PUT "/orgs/$TARGET_ORG/actions/secrets/$SECRET_NAME" \\
