@@ -54,6 +54,9 @@ build-onefile:
 	python -m PyInstaller gh-secrets-migrator-onefile.spec --clean
 	@echo "✅ Single-file build complete! Executable: dist/gh-secrets-migrator"
 
+build-docker:
+	docker build -t gh-secrets-migrator:latest .
+
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null || true
