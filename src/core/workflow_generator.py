@@ -114,17 +114,10 @@ def generate_org_secret_steps(org_secrets: List[str], target_org: str, repo_visi
             exit 1
           fi
           
-          # Build JSON array of repository IDs
-          REPO_IDS_JSON="["
-          for i in "${{!REPO_IDS[@]}}"; do
-            if [ $i -gt 0 ]; then
-              REPO_IDS_JSON+=","
-            fi
-            REPO_IDS_JSON+="${{REPO_IDS[$i]}}"
-          done
-          REPO_IDS_JSON+="]"
+          # Build JSON array of repository IDs using jq for proper formatting (compact output)
+          REPO_IDS_JSON=$(printf '%s\\n' "${{REPO_IDS[@]}}" | jq -Rs -c 'split("\\n") | map(select(length > 0) | tonumber)')
           
-          echo "Creating org secret with visibility 'selected' for ${{#REPO_IDS[@]}} repositories..."
+          echo "Creating org secret with visibility 'selected' with repository IDs: $REPO_IDS_JSON"
           
           # Get org public key for encryption
           KEY_RESPONSE=$(gh api "/orgs/$TARGET_ORG/actions/secrets/public-key")
@@ -181,11 +174,32 @@ def generate_org_secret_steps(org_secrets: List[str], target_org: str, repo_visi
           echo "Migrating organization secret: $SECRET_NAME (visibility: $VISIBILITY)"
           echo "=========================================="
           
-          # Create secret in target organization with the value from workflow secrets
-          if gh secret set "$SECRET_NAME" \\
-            --body "$SECRET_VALUE" \\
-            --org "$TARGET_ORG" \\
-            --visibility "$VISIBILITY"; then
+          # Get org public key for encryption
+          KEY_RESPONSE=$(gh api "/orgs/$TARGET_ORG/actions/secrets/public-key")
+          KEY_ID=$(echo "$KEY_RESPONSE" | jq -r '.key_id')
+          PUBLIC_KEY=$(echo "$KEY_RESPONSE" | jq -r '.key')
+          
+          # Encrypt the secret using libsodium (via Python one-liner)
+          ENCRYPTED_VALUE=$(python3 -c "
+          import base64
+          import json
+          import sys
+          from nacl import encoding, public
+
+          secret = '''$SECRET_VALUE'''
+          public_key = '''$PUBLIC_KEY'''
+
+          public_key_bytes = base64.b64decode(public_key)
+          sealed_box = public.SealedBox(public.PublicKey(public_key_bytes))
+          encrypted = sealed_box.encrypt(secret.encode('utf-8'))
+          print(base64.b64encode(encrypted).decode('utf-8'))
+          ")
+          
+          # Create/update the secret via API with visibility setting
+          if gh api --method PUT "/orgs/$TARGET_ORG/actions/secrets/$SECRET_NAME" \\
+            -f encrypted_value="$ENCRYPTED_VALUE" \\
+            -f key_id="$KEY_ID" \\
+            -f visibility="$VISIBILITY"; then
             echo "✓ Successfully migrated '$SECRET_NAME' to organization '$TARGET_ORG' with visibility '$VISIBILITY'"
           else
             echo "❌ ERROR: Failed to create secret '$SECRET_NAME' in target organization '$TARGET_ORG'"
@@ -283,20 +297,37 @@ def generate_workflow(
         # Environment secrets only for repo-to-repo migrations
         env_steps = ""
         if env_secrets:
-            env_steps = generate_environment_secret_steps(env_secrets, source_org, source_repo, target_org, target_repo)
+            env_steps = "\n" + generate_environment_secret_steps(env_secrets, source_org, source_repo, target_org, target_repo)
     
     # Generate cleanup code for temporary repository access
-    cleanup_temp_access = ""
+    cleanup_temp_access_step = ""
     if secrets_needing_cleanup:
-        cleanup_temp_access = f"""
-          echo ""
-          echo "Removing temporary repository access from org secrets..."
-"""
+        cleanup_code = ""
         for secret_name in secrets_needing_cleanup:
-            cleanup_temp_access += f"""          echo "Removing access for secret: {secret_name}"
+            cleanup_code += f"""          echo "Removing access for secret: {secret_name}"
           gh api --method DELETE "/orgs/$SOURCE_ORG/actions/secrets/{secret_name}/repositories/$(gh api '/repos/$SOURCE_ORG/$SOURCE_REPO' --jq '.id')" || echo "⚠️  Could not remove access (may already be removed)"
 """
-        cleanup_temp_access += """          echo "✓ Temporary access cleanup completed"
+        
+        cleanup_temp_access_step = f"""      - name: Cleanup Temporary Repository Access from Org Secrets (Always)
+        if: always()
+        env:
+          GH_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_SOURCE_PAT }}}}
+          SOURCE_ORG: '{source_org}'
+          SOURCE_REPO: '{source_repo}'
+        run: |
+          #!/bin/bash
+          set +e
+          
+          echo "Removing temporary repository access from org secrets..."
+          
+          SOURCE_REPO_ID=$(gh api '/repos/$SOURCE_ORG/$SOURCE_REPO' --jq '.id' 2>/dev/null)
+          
+          if [ -z "$SOURCE_REPO_ID" ]; then
+            echo "⚠️  Could not determine source repository ID"
+          else
+{cleanup_code}
+          fi
+
 """
     
     workflow = f"""name: move-secrets
@@ -309,11 +340,21 @@ permissions:
 jobs:
   migrate-repo-secrets:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11']
     steps:
-{migration_steps}
-{env_steps if env_steps else '      # No environment secrets to migrate'}
-
-      - name: Cleanup (Always)
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{{{ matrix.python-version }}}}
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pynacl==1.5.0
+{migration_steps}{env_steps}
+{cleanup_temp_access_step}      - name: Cleanup Temporary Secrets (Always)
         if: always()
         env:
           GH_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_SOURCE_PAT }}}}
@@ -322,34 +363,49 @@ jobs:
           SOURCE_REPO: '{source_repo}'
         run: |
           #!/bin/bash
-          set -e
+          set +e
 
           CLEANUP_FAILED=0
 
           echo "Cleaning up temporary secrets from source repo..."
           
-          if gh secret delete SECRETS_MIGRATOR_TARGET_PAT --repo ${{{{ github.repository }}}}; then
+          if gh secret delete SECRETS_MIGRATOR_TARGET_PAT --repo ${{{{ github.repository }}}} 2>/dev/null; then
             echo "✓ Successfully deleted SECRETS_MIGRATOR_TARGET_PAT"
           else
-            echo "ERROR: Failed to delete SECRETS_MIGRATOR_TARGET_PAT - THIS IS CRITICAL!"
+            echo "❌ ERROR: Failed to delete SECRETS_MIGRATOR_TARGET_PAT - THIS IS CRITICAL!"
             CLEANUP_FAILED=1
           fi
 
-          if gh secret delete SECRETS_MIGRATOR_SOURCE_PAT --repo ${{{{ github.repository }}}}; then
+          if gh secret delete SECRETS_MIGRATOR_SOURCE_PAT --repo ${{{{ github.repository }}}} 2>/dev/null; then
             echo "✓ Successfully deleted SECRETS_MIGRATOR_SOURCE_PAT"
           else
-            echo "ERROR: Failed to delete SECRETS_MIGRATOR_SOURCE_PAT - THIS IS CRITICAL!"
+            echo "❌ ERROR: Failed to delete SECRETS_MIGRATOR_SOURCE_PAT - THIS IS CRITICAL!"
             CLEANUP_FAILED=1
           fi
 
           if [ $CLEANUP_FAILED -eq 1 ]; then
             echo ""
-            echo "MANUAL ACTION REQUIRED: Please delete remaining temporary secrets from ${{{{ github.repository }}}}"
+            echo "❌ CLEANUP INCOMPLETE - MANUAL ACTION REQUIRED!"
+            echo "⚠️  CRITICAL: Temporary secrets were NOT successfully deleted from the source repository!"
+            echo "Please manually delete the following secrets from ${{{{ github.repository }}}}:"
             echo "  - SECRETS_MIGRATOR_TARGET_PAT"
             echo "  - SECRETS_MIGRATOR_SOURCE_PAT"
+            echo ""
+            echo "These secrets contain access tokens and must be removed to prevent unauthorized access!"
+            exit 1
           fi
-{cleanup_temp_access}
-          echo ""
+
+          echo "✓ Temporary secrets cleanup complete!"
+        shell: bash
+
+      - name: Cleanup Migration Branch (Always)
+        if: always()
+        env:
+          GH_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_SOURCE_PAT }}}}
+        run: |
+          #!/bin/bash
+          set +e
+
           echo "Deleting migration branch..."
           if gh api --method DELETE repos/${{{{ github.repository }}}}/git/refs/heads/{branch_name} 2>/dev/null; then
             echo "✓ Successfully deleted migration branch"
@@ -357,18 +413,7 @@ jobs:
             echo "ℹ️  Migration branch already deleted or does not exist (this is okay)"
           fi
 
-          if [ $CLEANUP_FAILED -eq 1 ]; then
-            echo ""
-            echo "ERROR: CLEANUP INCOMPLETE"
-            if [ ! -z "$CLEANUP_FAILED" ]; then
-              echo "MANUAL ACTION REQUIRED:"
-              echo "  - Delete temporary secrets from ${{{{ github.repository }}}}"
-            fi
-            exit 1
-          fi
-
-          echo ""
-          echo "✓ Cleanup complete!"
+          echo "✓ Migration branch cleanup complete!"
         shell: bash
 """
     return workflow.strip()

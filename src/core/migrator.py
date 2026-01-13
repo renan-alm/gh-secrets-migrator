@@ -572,6 +572,14 @@ class Migrator:
             self.log.info(f"Creating migration branch '{branch_name}'...")
             source_repo_obj = self.source_api.client.get_repo(f"{self.config.source_org}/{source_repo}")
             
+            # Delete branch if it already exists from a previous run
+            try:
+                self.source_api.delete_branch(self.config.source_org, source_repo, branch_name)
+                self.log.debug(f"Cleaned up existing migration branch '{branch_name}'")
+            except Exception:
+                # Branch doesn't exist, which is fine
+                pass
+            
             # Get default branch
             default_branch = source_repo_obj.default_branch
             base_ref = source_repo_obj.get_git_ref(f"heads/{default_branch}")
@@ -584,12 +592,28 @@ class Migrator:
             workflow_path = ".github/workflows/migrate-org-secrets.yml"
             self.log.debug(f"Creating workflow file at {workflow_path}...")
             
-            source_repo_obj.create_file(
-                workflow_path,
-                "chore: add organization secrets migration workflow",
-                workflow_content,
-                branch=branch_name
-            )
+            # Try to get existing file to check if it exists
+            try:
+                existing_file = source_repo_obj.get_contents(workflow_path, ref=branch_name)
+                # File exists, so update it instead
+                self.log.debug(f"Workflow file exists, updating it...")
+                source_repo_obj.update_file(
+                    workflow_path,
+                    "chore: update organization secrets migration workflow",
+                    workflow_content,
+                    existing_file.sha,
+                    branch=branch_name
+                )
+            except Exception:
+                # File doesn't exist, create it
+                self.log.debug(f"Creating new workflow file...")
+                source_repo_obj.create_file(
+                    workflow_path,
+                    "chore: add organization secrets migration workflow",
+                    workflow_content,
+                    branch=branch_name
+                )
+            
             self.log.info(f"✓ Workflow pushed to branch '{branch_name}'")
             
             # Step 4: Workflow is now running asynchronously - provide URL for monitoring
