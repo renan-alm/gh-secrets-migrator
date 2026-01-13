@@ -322,7 +322,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r scripts/requirements.txt
+          # pip install -r scripts/requirements.txt
 {migration_steps}{env_steps}
 {cleanup_temp_access_step}      - name: Cleanup Temporary Secrets (Always)
         if: always()
