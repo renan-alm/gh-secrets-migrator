@@ -289,25 +289,35 @@ class Migrator:
                 self.log.info("No environments to recreate")
                 return
 
-            self.log.info(f"Environments to recreate ({len(environments)} total):")
+            self.log.info(f"Environments to process ({len(environments)} total):")
             for env_name in environments:
                 self.log.info(f"  - {env_name}")
 
             # Create environments in target repository
             self.log.debug("Creating environments in target repository...")
+            created_envs = []
+            skipped_envs = []
+            
             for env_name in environments:
                 try:
-                    self.target_api.create_environment(
+                    was_created = self.target_api.create_environment(
                         self.config.target_org,
                         self.config.target_repo,
                         env_name
                     )
-                    self.log.debug(f"Successfully created/verified environment '{env_name}'")
+                    if was_created:
+                        created_envs.append(env_name)
+                    else:
+                        skipped_envs.append(env_name)
                 except RuntimeError as e:
                     # Only log as warning - don't fail the entire migration
                     self.log.warn(f"Environment '{env_name}' error: {e}")
 
-            self.log.success("Environment recreation completed!")
+            if created_envs:
+                self.log.success(f"Environments created ({len(created_envs)}): {', '.join(created_envs)}")
+            
+            if skipped_envs:
+                self.log.info(f"Skipping already existed ({len(skipped_envs)}): {', '.join(skipped_envs)}")
 
         except Exception as e:
             self.log.error(f"Unexpected error during environment recreation: {type(e).__name__}: {e}")
@@ -603,7 +613,8 @@ class Migrator:
         workflow = generate_workflow(
             self.config.source_org, self.config.source_repo,
             self.config.target_org, self.config.target_repo, branch_name,
-            env_secrets_info
+            env_secrets_info,
+            repo_secrets=secrets_to_migrate
         )
         self.log.debug("Creating workflow file...")
         self.source_api.create_file(

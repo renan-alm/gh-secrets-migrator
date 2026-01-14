@@ -57,6 +57,9 @@ build-onefile:
 build-docker:
 	docker build -t gh-secrets-migrator:latest .
 
+run-docker:
+	docker run -it -v $(pwd)/app --env-file .env.local gh-secrets-migrator
+
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null || true
