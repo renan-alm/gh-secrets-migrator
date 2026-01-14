@@ -471,8 +471,27 @@ def generate_workflow(
     
     # Repo-to-repo: include repository secrets step
     if not org_secrets:
-        if repo_secrets is not None:
-            migration_steps = generate_repo_secret_steps(repo_secrets, target_org, target_repo, target_endpoint)
+        # Build list of secrets to migrate as a bash array
+        if repo_secrets:
+            # Convert to bash array format: ("SECRET1" "SECRET2" "SECRET3")
+            secrets_array = " ".join([f'"{s}"' for s in repo_secrets])
+            allowed_secrets_check = f"""
+          # List of repository-level secrets to migrate (excludes org secrets)
+          ALLOWED_SECRETS=({secrets_array})
+          
+          # Check if secret is in allowed list
+          SECRET_ALLOWED=0
+          for ALLOWED_SECRET in "${{ALLOWED_SECRETS[@]}}"; do
+            if [[ "$SECRET_NAME" == "$ALLOWED_SECRET" ]]; then
+              SECRET_ALLOWED=1
+              break
+            fi
+          done
+          
+          if [[ $SECRET_ALLOWED -eq 0 ]]; then
+            echo "⊘ Skipping organization secret: $SECRET_NAME"
+            continue
+          fi"""
         else:
             # Extract hostname from API endpoint for GH_HOST
             gh_host = extract_gh_host(target_endpoint)
