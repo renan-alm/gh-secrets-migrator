@@ -136,7 +136,7 @@ def generate_org_secret_steps(org_secrets: List[str], target_org: str, repo_visi
           PUBLIC_KEY=$(echo "$KEY_RESPONSE" | jq -r '.key')
           
           # Encrypt the secret and create JSON payload using Python
-          echo "$ENCRYPT_SCRIPT" | base64 -d | python3
+          (export KEY_ID="$KEY_ID"; export PUBLIC_KEY="$PUBLIC_KEY"; export SECRET_VALUE="$SECRET_VALUE"; echo "$ENCRYPT_SCRIPT" | base64 -d | python3)
           
           # Create/update the secret via API using the JSON payload
           gh api --method PUT "/orgs/$TARGET_ORG/actions/secrets/$SECRET_NAME" --input /tmp/payload.json
@@ -177,7 +177,7 @@ def generate_org_secret_steps(org_secrets: List[str], target_org: str, repo_visi
           PUBLIC_KEY=$(echo "$KEY_RESPONSE" | jq -r '.key')
           
           # Encrypt the secret and create JSON payload using Python
-          echo "$ENCRYPT_SCRIPT" | base64 -d | python3
+          (export KEY_ID="$KEY_ID"; export PUBLIC_KEY="$PUBLIC_KEY"; export SECRET_VALUE="$SECRET_VALUE"; echo "$ENCRYPT_SCRIPT" | base64 -d | python3)
           
           # Create/update the secret via API with visibility setting
           if gh api --method PUT "/orgs/$TARGET_ORG/actions/secrets/$SECRET_NAME" --input /tmp/payload.json; then
