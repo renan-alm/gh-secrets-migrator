@@ -98,7 +98,6 @@ python main.py \
   --source-org <org> \
   --target-org <org> \
   --source-repo <repo> \
-  --target-repo <repo> \
   --source-pat <token> \
   --target-pat <token> \
   --org-to-org \
