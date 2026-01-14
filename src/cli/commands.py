@@ -10,47 +10,56 @@ from src.core.config import MigrationConfig
 @click.option(
     "--source-org",
     required=True,
+    envvar="SOURCE_ORG",
     help="Source organization name"
 )
 @click.option(
     "--source-repo",
     required=False,
+    envvar="SOURCE_REPO",
     help="Source repository name (required for both repo-to-repo and org-to-org migrations)"
 )
 @click.option(
     "--target-org",
     required=True,
+    envvar="TARGET_ORG",
     help="Target organization name"
 )
 @click.option(
     "--target-repo",
     required=False,
     default="",
+    envvar="TARGET_REPO",
     help="Target repository name (required for repo-to-repo migration, optional for org-to-org)"
 )
 @click.option(
     "--source-pat",
     default="",
+    envvar="SOURCE_PAT",
     help="Personal Access Token for source repository (optional if GITHUB_TOKEN is set)"
 )
 @click.option(
     "--target-pat",
     default="",
+    envvar="TARGET_PAT",
     help="Personal Access Token for target repository (optional if GITHUB_TOKEN is set)"
 )
 @click.option(
     "--verbose",
     is_flag=True,
+    envvar="VERBOSE",
     help="Enable verbose logging"
 )
 @click.option(
     "--skip-envs",
     is_flag=True,
+    envvar="SKIP_ENVS",
     help="Skip environment recreation (by default environments are recreated)"
 )
 @click.option(
     "--org-to-org",
     is_flag=True,
+    envvar="ORG_TO_ORG",
     help="Migrate organization secrets only (ignores repo and environment secrets)"
 )
 def migrate(
