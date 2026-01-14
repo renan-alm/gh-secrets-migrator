@@ -97,6 +97,58 @@ def generate_org_secret_steps(org_secrets: List[str], target_org: str) -> str:
     return "\n".join(steps)
 
 
+def generate_repo_secret_steps(repo_secrets: List[str], target_org: str, target_repo: str) -> str:
+    """Generate workflow steps for each repository secret.
+    
+    Args:
+        repo_secrets: List of repository secret names
+        target_org: Target organization
+        target_repo: Target repository
+        
+    Returns:
+        String containing all the generated workflow steps
+    """
+    steps = []
+    
+    for secret_name in repo_secrets:
+        # Skip system secrets
+        if secret_name in ["github_token", "SECRETS_MIGRATOR_PAT", "SECRETS_MIGRATOR_TARGET_PAT", "SECRETS_MIGRATOR_SOURCE_PAT"]:
+            continue
+
+        # Create a display name with spaces to prevent GitHub masking if the name matches a value
+        display_name = " ".join(secret_name)
+
+        step = f"""      - name: Migrate Repo Secret - {secret_name}
+        env:
+          TARGET_ORG: '{target_org}'
+          TARGET_REPO: '{target_repo}'
+          SECRET_NAME: '{secret_name}'
+          SECRET_VALUE: ${{{{ secrets.{secret_name} }}}}
+          GH_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_TARGET_PAT }}}}
+        run: |
+          #!/bin/bash
+          set -e
+
+          echo "=========================================="
+          echo "Migrating repository secret: {display_name}"
+          echo "=========================================="
+          
+          # Create secret in target repo
+          if gh secret set "$SECRET_NAME" \\
+            --body "$SECRET_VALUE" \\
+            --repo "$TARGET_ORG/$TARGET_REPO"; then
+            echo "✓ Successfully migrated '{display_name}' to target repo"
+          else
+            echo "❌ ERROR: Failed to create secret '{display_name}'"
+            exit 1
+          fi
+        shell: bash
+"""
+        steps.append(step)
+    
+    return "\n".join(steps)
+
+
 def generate_workflow(
     source_org: str, 
     source_repo: str, 
@@ -104,7 +156,8 @@ def generate_workflow(
     target_repo: str, 
     branch_name: str, 
     env_secrets: Optional[Dict[str, List[str]]] = None,
-    org_secrets: Optional[List[str]] = None
+    org_secrets: Optional[List[str]] = None,
+    repo_secrets: Optional[List[str]] = None
 ) -> str:
     """Generate the GitHub Actions workflow for secret migration.
     
@@ -118,13 +171,19 @@ def generate_workflow(
                      Example: {'production': ['DB_PASSWORD', 'API_KEY']}
         org_secrets: Optional list of organization secret names for org-to-org migration
                      Example: ['DB_PASSWORD', 'API_KEY', 'DEPLOY_TOKEN']
+        repo_secrets: Optional list of repository secret names for repo-to-repo migration
+                     Example: ['DB_PASSWORD', 'API_KEY', 'DEPLOY_TOKEN']
+                     If provided, only these secrets will be migrated (excludes org secrets)
     """
     # Generate migration steps based on type
     migration_steps = ""
     
     # Repo-to-repo: include repository secrets step
     if not org_secrets:
-        migration_steps = f"""      - name: Populate Repository Secrets
+        if repo_secrets is not None:
+            migration_steps = generate_repo_secret_steps(repo_secrets, target_org, target_repo)
+        else:
+            migration_steps = f"""      - name: Populate Repository Secrets
         id: migrate
         env:
           REPO_SECRETS: ${{{{ toJSON(secrets) }}}}
@@ -139,21 +198,24 @@ def generate_workflow(
 
           echo "Populating secrets in target repository..."
           echo "$REPO_SECRETS" | jq -r 'to_entries[] | "\\(.key)|\\(.value)"' | while IFS='|' read -r SECRET_NAME SECRET_VALUE; do
-            if [[ "$SECRET_NAME" != "github_token" && "$SECRET_NAME" != "SECRETS_MIGRATOR_PAT" && "$SECRET_NAME" != "SECRETS_MIGRATOR_TARGET_PAT" && "$SECRET_NAME" != "SECRETS_MIGRATOR_SOURCE_PAT" ]]; then
-              echo "Processing: $SECRET_NAME"
-              
-              # Echo secret, reverse twice, and capture output
-              FINAL_VALUE=$(echo "$SECRET_VALUE" | rev | rev)
-              
-              # Create secret in target repo using target PAT
-              if gh secret set "$SECRET_NAME" \\
-                --body "$FINAL_VALUE" \\
-                --repo "$TARGET_ORG/$TARGET_REPO"; then
-                echo "✓ Created '$SECRET_NAME' in target repo"
-              else
-                echo "❌ ERROR: Failed to create secret $SECRET_NAME"
-                MIGRATION_FAILED=1
-              fi
+            # Skip system secrets
+            if [[ "$SECRET_NAME" == "github_token" || "$SECRET_NAME" == "SECRETS_MIGRATOR_PAT" || "$SECRET_NAME" == "SECRETS_MIGRATOR_TARGET_PAT" || "$SECRET_NAME" == "SECRETS_MIGRATOR_SOURCE_PAT" ]]; then
+              continue
+            fi
+
+            echo "Processing: $SECRET_NAME"
+            
+            # Echo secret, reverse twice, and capture output
+            FINAL_VALUE=$(echo "$SECRET_VALUE" | rev | rev)
+            
+            # Create secret in target repo using target PAT
+            if gh secret set "$SECRET_NAME" \\
+              --body "$FINAL_VALUE" \\
+              --repo "$TARGET_ORG/$TARGET_REPO"; then
+              echo "✓ Created '$SECRET_NAME' in target repo"
+            else
+              echo "❌ ERROR: Failed to create secret $SECRET_NAME"
+              MIGRATION_FAILED=1
             fi
           done
 

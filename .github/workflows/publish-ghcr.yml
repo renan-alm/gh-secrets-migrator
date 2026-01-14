@@ -3,9 +3,10 @@ name: Publish to GHCR
 on:
   release:
     types: [published]
-  push:
+  pull_request:
     branches:
       - master
+  push
     tags:
       - 'v*'
 
