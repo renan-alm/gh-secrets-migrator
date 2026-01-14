@@ -168,21 +168,24 @@ def generate_workflow(
 
           echo "Populating secrets in target repository..."
           echo "$REPO_SECRETS" | jq -r 'to_entries[] | "\\(.key)|\\(.value)"' | while IFS='|' read -r SECRET_NAME SECRET_VALUE; do
-            if [[ "$SECRET_NAME" != "github_token" && "$SECRET_NAME" != "SECRETS_MIGRATOR_PAT" && "$SECRET_NAME" != "SECRETS_MIGRATOR_TARGET_PAT" && "$SECRET_NAME" != "SECRETS_MIGRATOR_SOURCE_PAT" ]]; then{allowed_secrets_check}
-              echo "Processing: $SECRET_NAME"
-              
-              # Echo secret, reverse twice, and capture output
-              FINAL_VALUE=$(echo "$SECRET_VALUE" | rev | rev)
-              
-              # Create secret in target repo using target PAT
-              if gh secret set "$SECRET_NAME" \\
-                --body "$FINAL_VALUE" \\
-                --repo "$TARGET_ORG/$TARGET_REPO"; then
-                echo "✓ Created '$SECRET_NAME' in target repo"
-              else
-                echo "❌ ERROR: Failed to create secret $SECRET_NAME"
-                MIGRATION_FAILED=1
-              fi
+            # Skip system secrets
+            if [[ "$SECRET_NAME" == "github_token" || "$SECRET_NAME" == "SECRETS_MIGRATOR_PAT" || "$SECRET_NAME" == "SECRETS_MIGRATOR_TARGET_PAT" || "$SECRET_NAME" == "SECRETS_MIGRATOR_SOURCE_PAT" ]]; then
+              continue
+            fi
+{allowed_secrets_check}
+            echo "Processing: $SECRET_NAME"
+            
+            # Echo secret, reverse twice, and capture output
+            FINAL_VALUE=$(echo "$SECRET_VALUE" | rev | rev)
+            
+            # Create secret in target repo using target PAT
+            if gh secret set "$SECRET_NAME" \\
+              --body "$FINAL_VALUE" \\
+              --repo "$TARGET_ORG/$TARGET_REPO"; then
+              echo "✓ Created '$SECRET_NAME' in target repo"
+            else
+              echo "❌ ERROR: Failed to create secret $SECRET_NAME"
+              MIGRATION_FAILED=1
             fi
           done
 
