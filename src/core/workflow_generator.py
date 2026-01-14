@@ -129,7 +129,7 @@ def generate_workflow(
     # Repo-to-repo: include repository secrets step
     if not org_secrets:
         # Build list of secrets to migrate as a bash array
-        if repo_secrets:
+        if repo_secrets is not None:
             # Convert to bash array format: ("SECRET1" "SECRET2" "SECRET3")
             secrets_array = " ".join([f'"{s}"' for s in repo_secrets])
             allowed_secrets_check = f"""
