@@ -501,7 +501,11 @@ def generate_workflow(
             if [[ "$SECRET_NAME" == "github_token" || "$SECRET_NAME" == "SECRETS_MIGRATOR_PAT" || "$SECRET_NAME" == "SECRETS_MIGRATOR_TARGET_PAT" || "$SECRET_NAME" == "SECRETS_MIGRATOR_SOURCE_PAT" ]]; then
               continue
             fi
+<<<<<<< HEAD
 
+=======
+{allowed_secrets_check}
+>>>>>>> bccc434 (Address code review feedback)
             echo "Processing: $SECRET_NAME"
             
             # Echo secret, reverse twice, and capture output
