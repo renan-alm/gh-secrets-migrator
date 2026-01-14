@@ -163,7 +163,6 @@ class GitHubClient:
             # Check if environment already exists
             try:
                 repository.get_environment(environment_name)
-                self._log_rate_limit(f"get_environment({org}/{repo}/{environment_name})")
                 self.log.debug(f"Environment '{environment_name}' already exists in {org}/{repo}, skipping creation")
                 return
             except UnknownObjectException:
