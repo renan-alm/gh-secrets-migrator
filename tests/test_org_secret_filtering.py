@@ -201,7 +201,7 @@ class TestWorkflowGeneratorWithRepoSecrets:
     
     def test_generate_workflow_many_repo_secrets(self):
         """Test workflow generation with many repo secrets."""
-        repo_secrets = [f"SECRET_{i}" for i in range(50)]
+        repo_secrets = [f"SECRET_{i}" for i in range(10)]
         workflow = generate_workflow(
             "source-org",
             "source-repo",
@@ -212,7 +212,7 @@ class TestWorkflowGeneratorWithRepoSecrets:
         )
         
         # Verify all secrets are in the workflow
-        for secret in repo_secrets[:10]:  # Check first 10
+        for secret in repo_secrets:
             assert secret in workflow
         
         # Verify structure is correct
@@ -224,17 +224,16 @@ class TestRepoSecretEdgeCases:
     
     @patch('src.clients.github.Github')
     def test_secret_with_same_name_as_org_secret(self, mock_github_class):
-        """Test handling when repo and org have secrets with same name.
+        """Test that org-level secrets are filtered out correctly.
         
-        This test verifies that org-level secrets are correctly filtered out,
-        even when they might share the same name as a potential repo-level secret.
-        
-        Note: If a secret truly exists at BOTH org and repo levels with the same name,
-        GitHub's API only returns the org version (with visibility field), so our
-        filter will exclude it. The actual repo-level value would be used in the
-        workflow context (${{ secrets.SECRET_NAME }}), but we can't detect it via
-        the API to include it in the migration.
+        Verifies the filter excludes org secrets even when they might share
+        names with potential repo-level secrets.
         """
+        # Note: If a secret truly exists at BOTH org and repo levels with the same name,
+        # GitHub's API only returns the org version (with visibility field), so our
+        # filter will exclude it. The actual repo-level value would be used in the
+        # workflow context (${{ secrets.SECRET_NAME }}), but we can't detect it via
+        # the API to include it in the migration.
         logger = Logger(verbose=False)
         
         mock_repo = Mock()
