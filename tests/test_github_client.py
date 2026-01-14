@@ -264,8 +264,10 @@ class TestMigrationResilienceWithRateLimitFailures:
         # Setup mock repo with secrets
         mock_secret1 = Mock()
         mock_secret1.name = "SECRET_1"
+        mock_secret1.raw_data = {}
         mock_secret2 = Mock()
         mock_secret2.name = "SECRET_2"
+        mock_secret2.raw_data = {}
         
         mock_repo = Mock()
         mock_repo.get_secrets.return_value = [mock_secret1, mock_secret2]
