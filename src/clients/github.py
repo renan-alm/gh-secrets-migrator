@@ -1,7 +1,7 @@
 """GitHub API client wrapper."""
 # flake8: noqa: E501
 from typing import List
-from github import Github
+from github import Github, UnknownObjectException
 from src.utils.logger import Logger
 
 
@@ -176,17 +176,23 @@ class GitHubClient:
         """Create an environment in the repository. Gracefully handles if already exists."""
         try:
             repository = self.client.get_repo(f"{org}/{repo}")
+            
+            # Check if environment already exists
+            try:
+                repository.get_environment(environment_name)
+                self.log.debug(f"Environment '{environment_name}' already exists in {org}/{repo}, skipping creation")
+                return
+            except UnknownObjectException:
+                # Environment doesn't exist, proceed with creation
+                pass
+            
+            # Create the environment
             repository.create_environment(environment_name)
             self._log_rate_limit(f"create_environment({org}/{repo}/{environment_name})")
             self.log.debug(f"Created environment '{environment_name}' in {org}/{repo}")
         except Exception as e:
-            error_str = str(e)
-            # Handle 409 Conflict (environment already exists)
-            if "409" in error_str or "already exists" in error_str.lower():
-                self.log.debug(f"Environment '{environment_name}' already exists, skipping")
-            else:
-                self.log.error(f"Failed to create environment '{environment_name}': {type(e).__name__}: {e}")
-                raise RuntimeError(f"Failed to create environment '{environment_name}': {e}")
+            self.log.error(f"Failed to create environment '{environment_name}': {type(e).__name__}: {e}")
+            raise RuntimeError(f"Failed to create environment '{environment_name}': {e}")
 
     def list_environment_names_with_secret_count(self, org: str, repo: str) -> dict:
         """List all environments with their secret counts.

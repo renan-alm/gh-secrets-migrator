@@ -74,7 +74,8 @@ def migrate(
 
     # Validate source-repo is always provided (required for workflow execution)
     if not source_repo:
-        logger.error("source-repo is required for both repo-to-repo and org-to-org migrations as placeholder for workflow execution")
+        logger.error("source-repo is required for both repo-to-repo and org-to-org migrations")
+        logger.error("REASON: The source-repo is a placeholder for workflow execution")
         logger.error("The migration workflow must run in a source repository")
         raise SystemExit(1)
 
