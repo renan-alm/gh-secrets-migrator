@@ -31,6 +31,9 @@ class TestOrgSecretFiltering:
         mock_secrets = [
             MockSecret("REPO_SECRET_1", is_org_secret=False),
             MockSecret("ORG_SECRET_1", is_org_secret=True),
+            MockSecret("REPO_SECRET_2", is_org_secret=False),
+            MockSecret("ORG_SECRET_2", is_org_secret=True),
+            MockSecret("REPO_SECRET_3", is_org_secret=False),
         ]
         mock_repo.get_secrets.return_value = mock_secrets
         
@@ -47,10 +50,13 @@ class TestOrgSecretFiltering:
         # Call the method
         result = client.list_repo_secrets("test-org", "test-repo")
         
-        # Verify org secret is filtered out
-        assert len(result) == 1
+        # Verify only repository secrets are returned
+        assert len(result) == 3
         assert "REPO_SECRET_1" in result
+        assert "REPO_SECRET_2" in result
+        assert "REPO_SECRET_3" in result
         assert "ORG_SECRET_1" not in result
+        assert "ORG_SECRET_2" not in result
     
     @patch('src.clients.github.Github')
     def test_list_repo_secrets_all_repo_secrets(self, mock_github_class):
