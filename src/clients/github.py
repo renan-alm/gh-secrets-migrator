@@ -337,12 +337,14 @@ class GitHubClient:
         try:
             organization = self.client.get_organization(org)
             secret = organization.get_secret(secret_name)
-            
-            visibility = getattr(secret, 'visibility', 'all')
+
+            # Get visibility attribute (defaults to 'all' for older API responses or edge cases)
+            # The 'visibility' attribute should always be present in modern GitHub API responses
+            visibility = getattr(secret, "visibility", "all")
             selected_repos = []
-            
+
             # Only fetch selected repositories if visibility is 'selected'
-            if visibility == 'selected':
+            if visibility == "selected":
                 try:
                     # selected_repositories returns a PaginatedList of Repository objects
                     repos = secret.selected_repositories
@@ -453,7 +455,9 @@ class GitHubClient:
 
             # Handle visibility settings
             if visibility == "selected":
-                # For 'selected' visibility, we need to handle repository list
+                # For 'selected' visibility, we need to get repository objects from names
+                # Note: Repository names should already be validated by the caller (migrator)
+                # to match existing repositories in the target org, minimizing failed lookups
                 selected_repos = []
                 if selected_repo_names:
                     # Build list of repository objects that exist

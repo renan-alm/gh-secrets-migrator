@@ -96,6 +96,7 @@ def generate_org_secret_steps(
             selected_repos = secret_item.get("selected_repository_names", [])
 
         # Prepare repository list for selected visibility
+        # Note: GitHub repository names cannot contain commas, so comma-separated format is safe
         repos_list = ""
         if visibility == "selected" and selected_repos:
             repos_list = ",".join(selected_repos)
