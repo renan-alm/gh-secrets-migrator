@@ -115,6 +115,9 @@ def generate_repo_secret_steps(repo_secrets: List[str], target_org: str, target_
         if secret_name in ["github_token", "SECRETS_MIGRATOR_PAT", "SECRETS_MIGRATOR_TARGET_PAT", "SECRETS_MIGRATOR_SOURCE_PAT"]:
             continue
 
+        # Create a display name with spaces to prevent GitHub masking if the name matches a value
+        display_name = " ".join(secret_name)
+
         step = f"""      - name: Migrate Repo Secret - {secret_name}
         env:
           TARGET_ORG: '{target_org}'
@@ -127,16 +130,16 @@ def generate_repo_secret_steps(repo_secrets: List[str], target_org: str, target_
           set -e
 
           echo "=========================================="
-          echo "Migrating repository secret: $SECRET_NAME"
+          echo "Migrating repository secret: {display_name}"
           echo "=========================================="
           
           # Create secret in target repo
           if gh secret set "$SECRET_NAME" \\
             --body "$SECRET_VALUE" \\
             --repo "$TARGET_ORG/$TARGET_REPO"; then
-            echo "✓ Successfully migrated '$SECRET_NAME' to target repo"
+            echo "✓ Successfully migrated '{display_name}' to target repo"
           else
-            echo "❌ ERROR: Failed to create secret '$SECRET_NAME'"
+            echo "❌ ERROR: Failed to create secret '{display_name}'"
             exit 1
           fi
         shell: bash
