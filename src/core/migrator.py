@@ -1,4 +1,5 @@
 """Core migration logic."""
+
 # flake8: noqa: E501
 import time
 from src.clients.github import GitHubClient
@@ -15,83 +16,84 @@ class Migrator:
         self.log = logger
         self.source_api = GitHubClient(config.source_pat, logger)
         self.target_api = GitHubClient(config.target_pat, logger)
-    
+
     def _check_rate_limits(self, checkpoint: str) -> bool:
         """Check rate limits and warn if low.
-        
+
         Args:
             checkpoint: Name of the current checkpoint for logging
-            
+
         Returns:
             True if both APIs have sufficient rate limit (>30 calls), False otherwise
         """
         source_info = self.source_api.get_rate_limit_info()
         target_info = self.target_api.get_rate_limit_info()
-        
-        source_ok = source_info['remaining'] >= 0
-        target_ok = target_info['remaining'] >= 0
-        
+
+        source_ok = source_info["remaining"] >= 0
+        target_ok = target_info["remaining"] >= 0
+
         if source_ok:
             self.log.debug(
                 f"[{checkpoint}] Source: {source_info['remaining']}/{source_info['limit']} calls remaining"
             )
-            if source_info['remaining'] < 50:
+            if source_info["remaining"] < 50:
                 self.log.warn(
                     f"⚠ Source API rate limit low: {source_info['remaining']} calls remaining! "
                     f"(Resets in ~{source_info['reset_in_seconds']}s)"
                 )
-        
+
         if target_ok:
             self.log.debug(
                 f"[{checkpoint}] Target: {target_info['remaining']}/{target_info['limit']} calls remaining"
             )
-            if target_info['remaining'] < 50:
+            if target_info["remaining"] < 50:
                 self.log.warn(
                     f"⚠ Target API rate limit low: {target_info['remaining']} calls remaining! "
                     f"(Resets in ~{target_info['reset_in_seconds']}s)"
                 )
-        
+
         # Return False if either API has critically low rate limit
-        return (source_info['remaining'] > 30 if source_ok else True) and \
-               (target_info['remaining'] > 30 if target_ok else True)
-    
+        return (source_info["remaining"] > 30 if source_ok else True) and (
+            target_info["remaining"] > 30 if target_ok else True
+        )
+
     def _wait_for_rate_limit_reset(self) -> None:
         """Wait until rate limit resets if critically low (< 100 calls remaining).
-        
+
         This prevents workflow creation when API calls are critically low,
         which would result in workflow failures. Uses x-ratelimit-reset header
         to determine exact reset time.
         """
         source_info = self.source_api.get_rate_limit_info()
         target_info = self.target_api.get_rate_limit_info()
-        
+
         critical_threshold = 100
         wait_needed = False
         reset_in_seconds = 0
         apis_to_wait = []
-        
+
         # Check if either API is critically low
-        if source_info['remaining'] >= 0 and source_info['remaining'] < critical_threshold:
+        if source_info["remaining"] >= 0 and source_info["remaining"] < critical_threshold:
             self.log.warn(
                 f"⚠️ CRITICAL: Source API has only {source_info['remaining']} calls remaining! "
                 f"Waiting for rate limit reset..."
             )
             wait_needed = True
-            apis_to_wait.append(("Source", source_info['reset_in_seconds']))
-        
-        if target_info['remaining'] >= 0 and target_info['remaining'] < critical_threshold:
+            apis_to_wait.append(("Source", source_info["reset_in_seconds"]))
+
+        if target_info["remaining"] >= 0 and target_info["remaining"] < critical_threshold:
             self.log.warn(
                 f"⚠️ CRITICAL: Target API has only {target_info['remaining']} calls remaining! "
                 f"Waiting for rate limit reset..."
             )
             wait_needed = True
-            apis_to_wait.append(("Target", target_info['reset_in_seconds']))
-        
+            apis_to_wait.append(("Target", target_info["reset_in_seconds"]))
+
         # Use the maximum reset time among all APIs that need to wait
         if wait_needed and apis_to_wait:
             reset_in_seconds = max(reset_time for _, reset_time in apis_to_wait)
             api_names = ", ".join(name for name, _ in apis_to_wait)
-            
+
             if reset_in_seconds > 0:
                 # Add 2 second buffer to ensure reset is complete
                 total_wait = reset_in_seconds + 2
@@ -100,40 +102,41 @@ class Migrator:
                     f"Waiting to ensure stable operation...\n"
                     f"This should take approximately {total_wait} seconds."
                 )
-                
+
                 # Sleep in chunks and show progress
                 elapsed = 0
                 while elapsed < total_wait:
                     remaining_wait = total_wait - elapsed
                     sleep_time = min(10, remaining_wait)
                     self.log.debug(
-                        f"Waiting for rate limit reset... "
-                        f"({remaining_wait}s remaining)"
+                        f"Waiting for rate limit reset... " f"({remaining_wait}s remaining)"
                     )
                     time.sleep(sleep_time)
                     elapsed += sleep_time
-                
+
                 # Final check - make sure we're past the reset time
                 time.sleep(1)
-                
+
                 # Log new rate limits after reset
                 source_info = self.source_api.get_rate_limit_info()
                 target_info = self.target_api.get_rate_limit_info()
-                
-                if source_info['remaining'] >= 0:
+
+                if source_info["remaining"] >= 0:
                     self.log.success(
                         f"✓ Source API rate limit reset: {source_info['remaining']}/{source_info['limit']} calls available"
                     )
-                if target_info['remaining'] >= 0:
+                if target_info["remaining"] >= 0:
                     self.log.success(
                         f"✓ Target API rate limit reset: {target_info['remaining']}/{target_info['limit']} calls available"
                     )
-                
+
                 self.log.success("Resuming migration...")
 
-    def _get_workflow_run_url(self, branch_name: str, workflow_name: str = "migrate-secrets.yml") -> str:
+    def _get_workflow_run_url(
+        self, branch_name: str, workflow_name: str = "migrate-secrets.yml"
+    ) -> str:
         """Get the URL of the workflow run triggered by the push to the migration branch.
-        
+
         Args:
             branch_name: The branch that triggered the workflow
             workflow_name: The workflow file name (default: migrate-secrets.yml)
@@ -142,7 +145,7 @@ class Migrator:
             repo = self.source_api.client.get_repo(
                 f"{self.config.source_org}/{self.config.source_repo}"
             )
-            
+
             # Try to get workflow by name
             try:
                 workflow = repo.get_workflow(workflow_name)
@@ -156,7 +159,7 @@ class Migrator:
                         break
                 if not workflow:
                     return ""
-            
+
             # Try multiple statuses: in_progress, queued, completed, failure
             for status in ["in_progress", "queued", "completed", "failure"]:
                 try:
@@ -167,7 +170,7 @@ class Migrator:
                 except Exception as status_error:
                     self.log.debug(f"No {status} runs found: {status_error}")
                     continue
-            
+
             return ""
         except Exception as e:
             self.log.debug(f"Could not fetch workflow run details: {e}")
@@ -179,11 +182,11 @@ class Migrator:
             # Check source PAT permissions
             self.log.debug("Checking source PAT permissions...")
             source_repo_path = f"{self.config.source_org}/{self.config.source_repo}"
-            
+
             try:
                 source_repo = self.source_api.client.get_repo(source_repo_path)
                 self.log.debug(f"✓ Source PAT has access to {source_repo_path}")
-                
+
                 # Try to list secrets to verify permission
                 secrets = source_repo.get_secrets()
                 _ = list(secrets)  # Force evaluation
@@ -217,11 +220,11 @@ class Migrator:
             # Check target PAT permissions
             self.log.debug("Checking target PAT permissions...")
             target_repo_path = f"{self.config.target_org}/{self.config.target_repo}"
-            
+
             try:
                 target_repo = self.target_api.client.get_repo(target_repo_path)
                 self.log.debug(f"✓ Target PAT has access to {target_repo_path}")
-                
+
                 # Try to list secrets to verify permission
                 secrets = target_repo.get_secrets()
                 _ = list(secrets)  # Force evaluation
@@ -253,15 +256,15 @@ class Migrator:
                     raise RuntimeError(f"Cannot access target repository: {target_error}")
 
             self.log.success("All PAT permissions validated!")
-            
+
             # Log initial rate limits
             source_info = self.source_api.get_rate_limit_info()
             target_info = self.target_api.get_rate_limit_info()
-            if source_info['remaining'] >= 0:
+            if source_info["remaining"] >= 0:
                 self.log.info(
                     f"Source API rate limit: {source_info['remaining']}/{source_info['limit']} calls remaining"
                 )
-            if target_info['remaining'] >= 0:
+            if target_info["remaining"] >= 0:
                 self.log.info(
                     f"Target API rate limit: {target_info['remaining']}/{target_info['limit']} calls remaining"
                 )
@@ -272,8 +275,7 @@ class Migrator:
         except Exception as e:
             self.log.error(f"Unexpected validation error: {type(e).__name__}: {e}")
             raise RuntimeError(
-                f"Unexpected error during PAT validation: {type(e).__name__}\n"
-                f"Details: {e}"
+                f"Unexpected error during PAT validation: {type(e).__name__}\n" f"Details: {e}"
             )
 
     def _recreate_environments(self) -> None:
@@ -297,13 +299,11 @@ class Migrator:
             self.log.debug("Creating environments in target repository...")
             created_envs = []
             skipped_envs = []
-            
+
             for env_name in environments:
                 try:
                     was_created = self.target_api.create_environment(
-                        self.config.target_org,
-                        self.config.target_repo,
-                        env_name
+                        self.config.target_org, self.config.target_repo, env_name
                     )
                     if was_created:
                         created_envs.append(env_name)
@@ -314,13 +314,19 @@ class Migrator:
                     self.log.warn(f"Environment '{env_name}' error: {e}")
 
             if created_envs:
-                self.log.success(f"Environments created ({len(created_envs)}): {', '.join(created_envs)}")
-            
+                self.log.success(
+                    f"Environments created ({len(created_envs)}): {', '.join(created_envs)}"
+                )
+
             if skipped_envs:
-                self.log.info(f"Skipping already existed ({len(skipped_envs)}): {', '.join(skipped_envs)}")
+                self.log.info(
+                    f"Skipping already existed ({len(skipped_envs)}): {', '.join(skipped_envs)}"
+                )
 
         except Exception as e:
-            self.log.error(f"Unexpected error during environment recreation: {type(e).__name__}: {e}")
+            self.log.error(
+                f"Unexpected error during environment recreation: {type(e).__name__}: {e}"
+            )
             raise RuntimeError(f"Failed to recreate environments: {e}")
 
     def _validate_org_permissions(self) -> None:
@@ -330,8 +336,10 @@ class Migrator:
             self.log.debug("Checking source PAT permissions for organization access...")
             try:
                 source_org = self.source_api.client.get_organization(self.config.source_org)
-                self.log.debug(f"✓ Source PAT has access to organization '{self.config.source_org}'")
-                
+                self.log.debug(
+                    f"✓ Source PAT has access to organization '{self.config.source_org}'"
+                )
+
                 # Try to list org secrets to verify permission
                 secrets = source_org.get_secrets()
                 _ = list(secrets)  # Force evaluation
@@ -355,8 +363,10 @@ class Migrator:
             self.log.debug("Checking target PAT permissions for organization access...")
             try:
                 target_org = self.target_api.client.get_organization(self.config.target_org)
-                self.log.debug(f"✓ Target PAT has access to organization '{self.config.target_org}'")
-                
+                self.log.debug(
+                    f"✓ Target PAT has access to organization '{self.config.target_org}'"
+                )
+
                 # Try to list org secrets to verify permission
                 secrets = target_org.get_secrets()
                 _ = list(secrets)  # Force evaluation
@@ -381,42 +391,54 @@ class Migrator:
         except RuntimeError:
             raise
         except Exception as e:
-            self.log.error(f"Unexpected error during permission validation: {type(e).__name__}: {e}")
+            self.log.error(
+                f"Unexpected error during permission validation: {type(e).__name__}: {e}"
+            )
             raise RuntimeError(f"Failed to validate organization permissions: {e}")
 
     def _migrate_org_secrets_workflow(self) -> None:
         """Migrate organization secrets using GitHub Actions workflow.
-        
+
         Org-to-org migration requires a source repository to host the workflow.
         If target repo is not provided, uses the same name as source repo.
-        
+
         For secrets with 'selected' visibility, attempts to find matching repositories
         in the target org and only assigns the secret to those that exist.
         """
         self.log.info("Fetching organization secrets from source...")
-        
+
         try:
             # Use source repo for workflow hosting, target repo defaults to source if not provided
             source_repo = self.config.source_repo
             target_repo = self.config.target_repo or self.config.source_repo
-            
+
             # Get list of org secrets with details (name, visibility, selected repos)
-            org_secrets_details = self.source_api.list_org_secrets_with_details(self.config.source_org)
-            
+            org_secrets_details = self.source_api.list_org_secrets_with_details(
+                self.config.source_org
+            )
+
             # Filter out system secrets
             secrets_to_migrate = [
-                secret_details for secret_details in org_secrets_details
-                if secret_details['name'] not in ("SECRETS_MIGRATOR_PAT", "SECRETS_MIGRATOR_TARGET_PAT", "SECRETS_MIGRATOR_SOURCE_PAT")
+                secret_details
+                for secret_details in org_secrets_details
+                if secret_details["name"]
+                not in (
+                    "SECRETS_MIGRATOR_PAT",
+                    "SECRETS_MIGRATOR_TARGET_PAT",
+                    "SECRETS_MIGRATOR_SOURCE_PAT",
+                )
             ]
-            
+
             if not secrets_to_migrate:
                 self.log.info("No organization secrets to migrate (found only system secrets)")
                 return
-            
+
             self.log.info(f"Organization secrets to migrate ({len(secrets_to_migrate)} total):")
-            
+
             # Get list of repositories in target org for validation
-            self.log.debug(f"Fetching list of repositories in target org '{self.config.target_org}'...")
+            self.log.debug(
+                f"Fetching list of repositories in target org '{self.config.target_org}'..."
+            )
             try:
                 target_org_repos = self.target_api.get_org_repository_names(self.config.target_org)
                 target_repo_set = set(target_org_repos)
@@ -425,19 +447,19 @@ class Migrator:
                 self.log.warn(f"Could not fetch target org repositories: {e}")
                 self.log.warn("Will proceed without repository validation")
                 target_repo_set = set()
-            
+
             # Process each secret and validate repository selections
             processed_secrets = []
             for secret_details in secrets_to_migrate:
-                secret_name = secret_details['name']
-                visibility = secret_details['visibility']
-                source_repos = secret_details['selected_repository_names']
-                
-                if visibility == 'selected' and source_repos and target_repo_set:
+                secret_name = secret_details["name"]
+                visibility = secret_details["visibility"]
+                source_repos = secret_details["selected_repository_names"]
+
+                if visibility == "selected" and source_repos and target_repo_set:
                     # Find matching repositories in target org
                     matching_repos = [repo for repo in source_repos if repo in target_repo_set]
                     missing_repos = [repo for repo in source_repos if repo not in target_repo_set]
-                    
+
                     # Log the results
                     if matching_repos:
                         self.log.info(
@@ -451,79 +473,91 @@ class Migrator:
                             f"  - {secret_name} (visibility: {visibility}, "
                             f"no matching repositories in target org)"
                         )
-                    
+
                     # Warn about missing repositories
                     for repo in missing_repos:
                         self.log.warn(
                             f"⚠️  Repository '{repo}' not found in target org '{self.config.target_org}' "
                             f"for secret '{secret_name}'"
                         )
-                    
+
                     # Update the secret details with validated repository list
-                    processed_secrets.append({
-                        'name': secret_name,
-                        'visibility': visibility,
-                        'selected_repository_names': matching_repos
-                    })
+                    processed_secrets.append(
+                        {
+                            "name": secret_name,
+                            "visibility": visibility,
+                            "selected_repository_names": matching_repos,
+                        }
+                    )
                 else:
                     # For 'all' or 'private' visibility, keep as-is
                     self.log.info(f"  - {secret_name} (visibility: {visibility})")
                     processed_secrets.append(secret_details)
-            
+
             branch_name = "migrate-org-secrets"
-            
+
             # Step 1: Create temporary secrets in source repo
             self.log.info("Creating temporary secrets in source repository...")
             self.source_api.create_repo_secret(
-                self.config.source_org, source_repo,
-                "SECRETS_MIGRATOR_TARGET_PAT", self.config.target_pat
+                self.config.source_org,
+                source_repo,
+                "SECRETS_MIGRATOR_TARGET_PAT",
+                self.config.target_pat,
             )
             self.source_api.create_repo_secret(
-                self.config.source_org, source_repo,
-                "SECRETS_MIGRATOR_SOURCE_PAT", self.config.source_pat
+                self.config.source_org,
+                source_repo,
+                "SECRETS_MIGRATOR_SOURCE_PAT",
+                self.config.source_pat,
             )
-            
+
             # Step 2: Generate workflow with org secrets (now with visibility details)
             self.log.info("Generating workflow for organization secret migration...")
             workflow_content = generate_workflow(
-                self.config.source_org, source_repo,
-                self.config.target_org, target_repo,
+                self.config.source_org,
+                source_repo,
+                self.config.target_org,
+                target_repo,
                 branch_name,
                 env_secrets=None,
-                org_secrets=processed_secrets
+                org_secrets=processed_secrets,
             )
-            
+
             # Step 3: Create migration branch and push workflow
             self.log.info(f"Creating migration branch '{branch_name}'...")
-            source_repo_obj = self.source_api.client.get_repo(f"{self.config.source_org}/{source_repo}")
-            
+            source_repo_obj = self.source_api.client.get_repo(
+                f"{self.config.source_org}/{source_repo}"
+            )
+
             # Get default branch
             default_branch = source_repo_obj.default_branch
             base_ref = source_repo_obj.get_git_ref(f"heads/{default_branch}")
-            
+
             # Create new branch
             source_repo_obj.create_git_ref(f"refs/heads/{branch_name}", base_ref.object.sha)
             self.log.debug(f"✓ Created migration branch '{branch_name}'")
-            
+
             # Create workflow file
             workflow_path = ".github/workflows/migrate-org-secrets.yml"
             self.log.debug(f"Creating workflow file at {workflow_path}...")
-            
+
             source_repo_obj.create_file(
                 workflow_path,
                 "chore: add organization secrets migration workflow",
                 workflow_content,
-                branch=branch_name
+                branch=branch_name,
             )
             self.log.info(f"✓ Workflow pushed to branch '{branch_name}'")
-            
+
             # Step 4: Workflow is now running asynchronously - provide URL for monitoring
             self.log.success("✓ Workflow triggered successfully!")
-            
+
             workflow_url = f"https://github.com/{self.config.source_org}/{self.config.source_repo}/actions/workflows/migrate-org-secrets.yml"
-            self.log.success("✓ Organization secret migration started! Check the link below to monitor progress.")
+            self.log.success(
+                "✓ Organization secret migration started! Check the link below to monitor progress."
+            )
             self.log.info(f"Monitor workflow progress here: {workflow_url}")
-            
+
         except RuntimeError:
             raise
         except Exception as e:
@@ -533,24 +567,24 @@ class Migrator:
     def run(self) -> None:
         """Execute the migration process."""
         self.log.info("Migrating Secrets...")
-        
+
         # Handle org-to-org migration
         if self.config.org_to_org:
             self.log.info(f"SOURCE ORG: {self.config.source_org}")
             self.log.info(f"TARGET ORG: {self.config.target_org}")
             self.log.info("Mode: Organization-to-Organization (org secrets only)")
-            
+
             # Validate PAT permissions for org access
             self.log.info("Validating PAT permissions...")
             self._validate_org_permissions()
-            
+
             # Check if rate limit is critically low before proceeding
             self._wait_for_rate_limit_reset()
-            
+
             # Attempt org-only migration
             self._migrate_org_secrets_workflow()
             return
-        
+
         # Handle repo-to-repo migration (original flow)
         self.log.info(f"SOURCE ORG: {self.config.source_org}")
         self.log.info(f"SOURCE REPO: {self.config.source_repo}")
@@ -561,7 +595,7 @@ class Migrator:
         # Validate PAT permissions
         self.log.info("Validating PAT permissions...")
         self._validate_permissions()
-        
+
         # Check if rate limit is critically low before proceeding
         self._wait_for_rate_limit_reset()
 
@@ -583,8 +617,15 @@ class Migrator:
 
         # Filter out system secrets
         secrets_to_migrate = [
-            name for name in secret_names
-            if name not in ("github_token", "SECRETS_MIGRATOR_PAT", "SECRETS_MIGRATOR_TARGET_PAT", "SECRETS_MIGRATOR_SOURCE_PAT")
+            name
+            for name in secret_names
+            if name
+            not in (
+                "github_token",
+                "SECRETS_MIGRATOR_PAT",
+                "SECRETS_MIGRATOR_TARGET_PAT",
+                "SECRETS_MIGRATOR_SOURCE_PAT",
+            )
         ]
 
         if not secrets_to_migrate:
@@ -600,9 +641,9 @@ class Migrator:
         env_secrets_info = self.source_api.list_all_environments_with_secrets(
             self.config.source_org, self.config.source_repo
         )
-        
+
         self._check_rate_limits("after_listing_secrets")
-        
+
         if env_secrets_info:
             self.log.info(f"Environment secrets to migrate ({len(env_secrets_info)} total):")
             for env_name, secret_names in env_secrets_info.items():
@@ -627,9 +668,7 @@ class Migrator:
 
         # Step 4: Delete old migration branch if it exists
         self.log.debug(f"Checking if branch {branch_name} exists...")
-        self.source_api.delete_branch(
-            self.config.source_org, self.config.source_repo, branch_name
-        )
+        self.source_api.delete_branch(self.config.source_org, self.config.source_repo, branch_name)
 
         # Step 5: Create target PAT secret in source repo (for workflow to access target)
         self.log.info("Creating SECRETS_MIGRATOR_TARGET_PAT in source repository...")
@@ -637,7 +676,7 @@ class Migrator:
             self.config.source_org,
             self.config.source_repo,
             "SECRETS_MIGRATOR_TARGET_PAT",
-            self.config.target_pat
+            self.config.target_pat,
         )
         self.log.debug("Successfully created SECRETS_MIGRATOR_TARGET_PAT")
 
@@ -647,19 +686,16 @@ class Migrator:
             self.config.source_org,
             self.config.source_repo,
             "SECRETS_MIGRATOR_SOURCE_PAT",
-            self.config.source_pat
+            self.config.source_pat,
         )
         self.log.debug("Successfully created SECRETS_MIGRATOR_SOURCE_PAT")
 
         # Step 6: Create migration branch
         self.log.debug(f"Creating branch {branch_name}...")
         self.source_api.create_branch(
-            self.config.source_org,
-            self.config.source_repo,
-            branch_name,
-            master_commit_sha
+            self.config.source_org, self.config.source_repo, branch_name, master_commit_sha
         )
-        
+
         self._check_rate_limits("after_branch_creation")
 
         # Step 7: Final rate limit check before workflow creation (most critical operation)
@@ -667,10 +703,13 @@ class Migrator:
 
         # Step 7: Generate and create workflow file
         workflow = generate_workflow(
-            self.config.source_org, self.config.source_repo,
-            self.config.target_org, self.config.target_repo, branch_name,
+            self.config.source_org,
+            self.config.source_repo,
+            self.config.target_org,
+            self.config.target_repo,
+            branch_name,
             env_secrets_info,
-            repo_secrets=secrets_to_migrate
+            repo_secrets=secrets_to_migrate,
         )
         self.log.debug("Creating workflow file...")
         self.source_api.create_file(
@@ -678,12 +717,12 @@ class Migrator:
             self.config.source_repo,
             branch_name,
             ".github/workflows/migrate-secrets.yml",
-            workflow
+            workflow,
         )
 
         # Step 7: Fetch workflow run details with retries
         self.log.debug("Waiting for workflow to be triggered...")
-        
+
         workflow_run_url = ""
         max_retries = 6
         for attempt in range(max_retries):
@@ -693,12 +732,13 @@ class Migrator:
                 self.log.debug(f"Found workflow run URL on attempt {attempt + 1}")
                 break
             if attempt < max_retries - 1:
-                self.log.debug(f"Workflow run not yet found, retrying... (attempt {attempt + 1}/{max_retries})")
-        
+                self.log.debug(
+                    f"Workflow run not yet found, retrying... (attempt {attempt + 1}/{max_retries})"
+                )
+
         if workflow_run_url:
             self.log.success(
-                f"Secrets migration workflow triggered!\n"
-                f"View progress: {workflow_run_url}"
+                f"Secrets migration workflow triggered!\n" f"View progress: {workflow_run_url}"
             )
         else:
             # Fallback to generic actions page if we can't get the specific run
@@ -707,5 +747,5 @@ class Migrator:
                 f"Secrets migration workflow triggered!\n"
                 f"View progress: https://github.com/{self.config.source_org}/{self.config.source_repo}/actions?query=branch%3Amigrate-secrets"
             )
-        
+
         self._check_rate_limits("migration_complete")

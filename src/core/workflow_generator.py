@@ -1,10 +1,19 @@
 """Workflow generation for secrets migration."""
+
 from typing import Dict, List, Optional, Union
+
 # flake8: noqa: E501
 
-def generate_environment_secret_steps(env_secrets: Dict[str, List[str]], source_org: str, source_repo: str, target_org: str, target_repo: str) -> str:
+
+def generate_environment_secret_steps(
+    env_secrets: Dict[str, List[str]],
+    source_org: str,
+    source_repo: str,
+    target_org: str,
+    target_repo: str,
+) -> str:
     """Generate workflow steps for each environment secret.
-    
+
     Args:
         env_secrets: Dict mapping environment names to lists of secret names
                      Example: {'production': ['DB_PASSWORD', 'API_KEY'], 'staging': ['DB_PASSWORD']}
@@ -12,12 +21,12 @@ def generate_environment_secret_steps(env_secrets: Dict[str, List[str]], source_
         source_repo: Source repository
         target_org: Target organization
         target_repo: Target repository
-        
+
     Returns:
         String containing all the generated workflow steps
     """
     steps = []
-    
+
     for env_name, secret_names in env_secrets.items():
         for secret_name in secret_names:
             step = f"""      - name: Migrate {env_name} - {secret_name}
@@ -49,13 +58,15 @@ def generate_environment_secret_steps(env_secrets: Dict[str, List[str]], source_
         shell: bash
 """
             steps.append(step)
-    
+
     return "\n".join(steps)
 
 
-def generate_org_secret_steps(org_secrets: Union[List[str], List[Dict[str, any]]], target_org: str) -> str:
+def generate_org_secret_steps(
+    org_secrets: Union[List[str], List[Dict[str, any]]], target_org: str
+) -> str:
     """Generate workflow steps for each organization secret with visibility settings.
-    
+
     Args:
         org_secrets: List of organization secrets. Can be:
                      1. List of secret names (legacy format): ['DB_PASSWORD', 'API_KEY']
@@ -65,35 +76,35 @@ def generate_org_secret_steps(org_secrets: Union[List[str], List[Dict[str, any]]
                             {'name': 'API_KEY', 'visibility': 'selected', 'selected_repository_names': ['repo1', 'repo2']}
                         ]
         target_org: Target organization
-        
+
     Returns:
         String containing all the generated workflow steps
     """
     steps = []
-    
+
     for secret_item in org_secrets:
         # Handle both legacy format (string) and new format (dict)
         if isinstance(secret_item, str):
             # Legacy format: just a secret name
             secret_name = secret_item
-            visibility = 'all'
+            visibility = "all"
             selected_repos = []
         else:
             # New format: dict with details
-            secret_name = secret_item['name']
-            visibility = secret_item.get('visibility', 'all')
-            selected_repos = secret_item.get('selected_repository_names', [])
-        
+            secret_name = secret_item["name"]
+            visibility = secret_item.get("visibility", "all")
+            selected_repos = secret_item.get("selected_repository_names", [])
+
         # Build the visibility flags for gh secret set command
         visibility_flags = f"--visibility {visibility}"
-        if visibility == 'selected' and selected_repos:
+        if visibility == "selected" and selected_repos:
             # Pass repository names as comma-separated list
-            repos_list = ','.join(selected_repos)
+            repos_list = ",".join(selected_repos)
             visibility_flags = f"--visibility selected --repos '{repos_list}'"
-        elif visibility == 'selected':
+        elif visibility == "selected":
             # Selected visibility but no repositories (empty selection)
             visibility_flags = "--visibility selected"
-        
+
         step = f"""      - name: Migrate Org Secret - {secret_name}
         env:
           TARGET_ORG: '{target_org}'
@@ -124,26 +135,31 @@ def generate_org_secret_steps(org_secrets: Union[List[str], List[Dict[str, any]]
         shell: bash
 """
         steps.append(step)
-    
+
     return "\n".join(steps)
 
 
 def generate_repo_secret_steps(repo_secrets: List[str], target_org: str, target_repo: str) -> str:
     """Generate workflow steps for each repository secret.
-    
+
     Args:
         repo_secrets: List of repository secret names
         target_org: Target organization
         target_repo: Target repository
-        
+
     Returns:
         String containing all the generated workflow steps
     """
     steps = []
-    
+
     for secret_name in repo_secrets:
         # Skip system secrets
-        if secret_name in ["github_token", "SECRETS_MIGRATOR_PAT", "SECRETS_MIGRATOR_TARGET_PAT", "SECRETS_MIGRATOR_SOURCE_PAT"]:
+        if secret_name in [
+            "github_token",
+            "SECRETS_MIGRATOR_PAT",
+            "SECRETS_MIGRATOR_TARGET_PAT",
+            "SECRETS_MIGRATOR_SOURCE_PAT",
+        ]:
             continue
 
         # Create a display name with spaces to prevent GitHub masking if the name matches a value
@@ -176,22 +192,22 @@ def generate_repo_secret_steps(repo_secrets: List[str], target_org: str, target_
         shell: bash
 """
         steps.append(step)
-    
+
     return "\n".join(steps)
 
 
 def generate_workflow(
-    source_org: str, 
-    source_repo: str, 
-    target_org: str, 
-    target_repo: str, 
-    branch_name: str, 
+    source_org: str,
+    source_repo: str,
+    target_org: str,
+    target_repo: str,
+    branch_name: str,
     env_secrets: Optional[Dict[str, List[str]]] = None,
     org_secrets: Optional[List[str]] = None,
-    repo_secrets: Optional[List[str]] = None
+    repo_secrets: Optional[List[str]] = None,
 ) -> str:
     """Generate the GitHub Actions workflow for secret migration.
-    
+
     Args:
         source_org: Source organization
         source_repo: Source repository
@@ -208,7 +224,7 @@ def generate_workflow(
     """
     # Generate migration steps based on type
     migration_steps = ""
-    
+
     # Repo-to-repo: include repository secrets step
     if not org_secrets:
         if repo_secrets is not None:
@@ -260,7 +276,7 @@ def generate_workflow(
           echo "✓ All secrets migrated successfully!"
         shell: bash
 """
-    
+
     # Org-to-org Migration flow
     if org_secrets:
         migration_steps += generate_org_secret_steps(org_secrets, target_org)
@@ -269,8 +285,10 @@ def generate_workflow(
         # Environment secrets only for repo-to-repo migrations
         env_steps = ""
         if env_secrets:
-            env_steps = generate_environment_secret_steps(env_secrets, source_org, source_repo, target_org, target_repo)
-    
+            env_steps = generate_environment_secret_steps(
+                env_secrets, source_org, source_repo, target_org, target_repo
+            )
+
     workflow = f"""name: move-secrets
 on:
   push:
