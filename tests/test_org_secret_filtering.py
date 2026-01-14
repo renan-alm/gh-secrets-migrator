@@ -217,6 +217,7 @@ class TestRepoSecretEdgeCases:
     
     @patch('src.clients.github.Github')
     def test_secret_with_same_name_as_org_secret(self, mock_github_class):
+<<<<<<< HEAD
         """Test that org-level secrets are handled correctly.
         
 <<<<<<< HEAD
@@ -232,7 +233,18 @@ class TestRepoSecretEdgeCases:
         workflow context (${{ secrets.SECRET_NAME }}), but we can't detect it via
         the API to include it in the migration.
 >>>>>>> bccc434 (Address code review feedback)
+=======
+        """Test that org-level secrets are filtered out correctly.
+        
+        Verifies the filter excludes org secrets even when they might share
+        names with potential repo-level secrets.
+>>>>>>> 4df8b4b (Address nitpick code review feedback)
         """
+        # Note: If a secret truly exists at BOTH org and repo levels with the same name,
+        # GitHub's API only returns the org version (with visibility field), so our
+        # filter will exclude it. The actual repo-level value would be used in the
+        # workflow context (${{ secrets.SECRET_NAME }}), but we can't detect it via
+        # the API to include it in the migration.
         logger = Logger(verbose=False)
         
         mock_repo = Mock()

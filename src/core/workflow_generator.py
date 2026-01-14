@@ -489,7 +489,7 @@ def generate_workflow(
           done
           
           if [[ $SECRET_ALLOWED -eq 0 ]]; then
-            echo "⊘ Skipping organization secret: $SECRET_NAME"
+            echo "Skipping organization secret: $SECRET_NAME"
             continue
           fi"""
         else:
