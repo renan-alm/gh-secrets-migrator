@@ -21,5 +21,4 @@ COPY . .
 # Set the entrypoint to the main script
 ENTRYPOINT ["python", "main.py"]
 
-# Default command (can be overridden)
-CMD ["--help"]
+
