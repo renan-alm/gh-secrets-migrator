@@ -389,6 +389,9 @@ class Migrator:
         
         Org-to-org migration requires a source repository to host the workflow.
         If target repo is not provided, uses the same name as source repo.
+        
+        For secrets with 'selected' visibility, attempts to find matching repositories
+        in the target org and only assigns the secret to those that exist.
         """
         self.log.info("Fetching organization secrets from source...")
         
@@ -397,13 +400,13 @@ class Migrator:
             source_repo = self.config.source_repo
             target_repo = self.config.target_repo or self.config.source_repo
             
-            # Get list of org secrets from source
-            org_secret_names = self.source_api.list_org_secrets(self.config.source_org)
+            # Get list of org secrets with details (name, visibility, selected repos)
+            org_secrets_details = self.source_api.list_org_secrets_with_details(self.config.source_org)
             
             # Filter out system secrets
             secrets_to_migrate = [
-                name for name in org_secret_names
-                if name not in ("SECRETS_MIGRATOR_PAT", "SECRETS_MIGRATOR_TARGET_PAT", "SECRETS_MIGRATOR_SOURCE_PAT")
+                secret_details for secret_details in org_secrets_details
+                if secret_details['name'] not in ("SECRETS_MIGRATOR_PAT", "SECRETS_MIGRATOR_TARGET_PAT", "SECRETS_MIGRATOR_SOURCE_PAT")
             ]
             
             if not secrets_to_migrate:
@@ -411,8 +414,61 @@ class Migrator:
                 return
             
             self.log.info(f"Organization secrets to migrate ({len(secrets_to_migrate)} total):")
-            for name in secrets_to_migrate:
-                self.log.info(f"  - {name}")
+            
+            # Get list of repositories in target org for validation
+            self.log.debug(f"Fetching list of repositories in target org '{self.config.target_org}'...")
+            try:
+                target_org_repos = self.target_api.get_org_repository_names(self.config.target_org)
+                target_repo_set = set(target_org_repos)
+                self.log.debug(f"Found {len(target_org_repos)} repositories in target org")
+            except Exception as e:
+                self.log.warn(f"Could not fetch target org repositories: {e}")
+                self.log.warn("Will proceed without repository validation")
+                target_repo_set = set()
+            
+            # Process each secret and validate repository selections
+            processed_secrets = []
+            for secret_details in secrets_to_migrate:
+                secret_name = secret_details['name']
+                visibility = secret_details['visibility']
+                source_repos = secret_details['selected_repository_names']
+                
+                if visibility == 'selected' and source_repos and target_repo_set:
+                    # Find matching repositories in target org
+                    matching_repos = [repo for repo in source_repos if repo in target_repo_set]
+                    missing_repos = [repo for repo in source_repos if repo not in target_repo_set]
+                    
+                    # Log the results
+                    if matching_repos:
+                        self.log.info(
+                            f"  - {secret_name} (visibility: {visibility}, "
+                            f"repos: {len(matching_repos)}/{len(source_repos)} found in target)"
+                        )
+                        for repo in matching_repos:
+                            self.log.debug(f"      ✓ Repository '{repo}' found in target org")
+                    else:
+                        self.log.info(
+                            f"  - {secret_name} (visibility: {visibility}, "
+                            f"no matching repositories in target org)"
+                        )
+                    
+                    # Warn about missing repositories
+                    for repo in missing_repos:
+                        self.log.warn(
+                            f"⚠️  Repository '{repo}' not found in target org '{self.config.target_org}' "
+                            f"for secret '{secret_name}'"
+                        )
+                    
+                    # Update the secret details with validated repository list
+                    processed_secrets.append({
+                        'name': secret_name,
+                        'visibility': visibility,
+                        'selected_repository_names': matching_repos
+                    })
+                else:
+                    # For 'all' or 'private' visibility, keep as-is
+                    self.log.info(f"  - {secret_name} (visibility: {visibility})")
+                    processed_secrets.append(secret_details)
             
             branch_name = "migrate-org-secrets"
             
@@ -427,14 +483,14 @@ class Migrator:
                 "SECRETS_MIGRATOR_SOURCE_PAT", self.config.source_pat
             )
             
-            # Step 2: Generate workflow with org secrets
+            # Step 2: Generate workflow with org secrets (now with visibility details)
             self.log.info("Generating workflow for organization secret migration...")
             workflow_content = generate_workflow(
                 self.config.source_org, source_repo,
                 self.config.target_org, target_repo,
                 branch_name,
                 env_secrets=None,
-                org_secrets=secrets_to_migrate
+                org_secrets=processed_secrets
             )
             
             # Step 3: Create migration branch and push workflow

@@ -1,5 +1,5 @@
 """Workflow generation for secrets migration."""
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 # flake8: noqa: E501
 
 def generate_environment_secret_steps(env_secrets: Dict[str, List[str]], source_org: str, source_repo: str, target_org: str, target_repo: str) -> str:
@@ -53,12 +53,17 @@ def generate_environment_secret_steps(env_secrets: Dict[str, List[str]], source_
     return "\n".join(steps)
 
 
-def generate_org_secret_steps(org_secrets: List[str], target_org: str) -> str:
-    """Generate workflow steps for each organization secret.
+def generate_org_secret_steps(org_secrets: Union[List[str], List[Dict[str, any]]], target_org: str) -> str:
+    """Generate workflow steps for each organization secret with visibility settings.
     
     Args:
-        org_secrets: List of organization secret names
-                     Example: ['DB_PASSWORD', 'API_KEY', 'DEPLOY_TOKEN']
+        org_secrets: List of organization secrets. Can be:
+                     1. List of secret names (legacy format): ['DB_PASSWORD', 'API_KEY']
+                     2. List of secret details dicts (new format):
+                        [
+                            {'name': 'DB_PASSWORD', 'visibility': 'all', 'selected_repository_names': []},
+                            {'name': 'API_KEY', 'visibility': 'selected', 'selected_repository_names': ['repo1', 'repo2']}
+                        ]
         target_org: Target organization
         
     Returns:
@@ -66,12 +71,36 @@ def generate_org_secret_steps(org_secrets: List[str], target_org: str) -> str:
     """
     steps = []
     
-    for secret_name in org_secrets:
+    for secret_item in org_secrets:
+        # Handle both legacy format (string) and new format (dict)
+        if isinstance(secret_item, str):
+            # Legacy format: just a secret name
+            secret_name = secret_item
+            visibility = 'all'
+            selected_repos = []
+        else:
+            # New format: dict with details
+            secret_name = secret_item['name']
+            visibility = secret_item.get('visibility', 'all')
+            selected_repos = secret_item.get('selected_repository_names', [])
+        
+        # Build the visibility flags for gh secret set command
+        visibility_flags = f"--visibility {visibility}"
+        if visibility == 'selected' and selected_repos:
+            # Pass repository names as comma-separated list
+            repos_list = ','.join(selected_repos)
+            visibility_flags = f"--visibility selected --repos '{repos_list}'"
+        elif visibility == 'selected':
+            # Selected visibility but no repositories (empty selection)
+            visibility_flags = "--visibility selected"
+        
         step = f"""      - name: Migrate Org Secret - {secret_name}
         env:
           TARGET_ORG: '{target_org}'
           SECRET_NAME: '{secret_name}'
           SECRET_VALUE: ${{{{ secrets.{secret_name} }}}}
+          VISIBILITY: '{visibility}'
+          VISIBILITY_FLAGS: '{visibility_flags}'
           GH_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_TARGET_PAT }}}}
         run: |
           #!/bin/bash
@@ -79,13 +108,15 @@ def generate_org_secret_steps(org_secrets: List[str], target_org: str) -> str:
 
           echo "=========================================="
           echo "Migrating organization secret: $SECRET_NAME"
+          echo "Visibility: $VISIBILITY"
           echo "=========================================="
           
-          # Create secret in target organization with the value from workflow secrets
+          # Create secret in target organization with visibility settings
           if gh secret set "$SECRET_NAME" \\
             --body "$SECRET_VALUE" \\
-            --org "$TARGET_ORG"; then
-            echo "✓ Successfully migrated '$SECRET_NAME' to organization '$TARGET_ORG'"
+            --org "$TARGET_ORG" \\
+            $VISIBILITY_FLAGS; then
+            echo "✓ Successfully migrated '$SECRET_NAME' to organization '$TARGET_ORG' with visibility '$VISIBILITY'"
           else
             echo "❌ ERROR: Failed to create secret '$SECRET_NAME' in target organization '$TARGET_ORG'"
             exit 1
