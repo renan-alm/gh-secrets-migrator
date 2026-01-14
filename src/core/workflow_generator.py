@@ -1,6 +1,6 @@
 """Workflow generation for secrets migration."""
 
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 # flake8: noqa: E501
 
@@ -63,7 +63,7 @@ def generate_environment_secret_steps(
 
 
 def generate_org_secret_steps(
-    org_secrets: Union[List[str], List[Dict[str, any]]], target_org: str
+    org_secrets: Union[List[str], List[Dict[str, Any]]], target_org: str
 ) -> str:
     """Generate workflow steps for each organization secret with visibility settings.
 

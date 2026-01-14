@@ -1,6 +1,6 @@
 """GitHub API client wrapper."""
 # flake8: noqa: E501
-from typing import List, Dict, Optional
+from typing import Any, Dict, List, Optional
 from github import Github, UnknownObjectException
 from src.utils.logger import Logger
 
@@ -321,7 +321,7 @@ class GitHubClient:
             self.log.error(f"Failed to delete organization secret {secret_name}: {type(e).__name__}: {e}")
             raise RuntimeError(f"Failed to delete organization secret {secret_name}: {e}")
 
-    def get_org_secret_details(self, org: str, secret_name: str) -> Dict[str, any]:
+    def get_org_secret_details(self, org: str, secret_name: str) -> Dict[str, Any]:
         """Get details of an organization secret including visibility and selected repos.
         
         Args:
@@ -360,7 +360,7 @@ class GitHubClient:
             self.log.error(f"Failed to get details for organization secret '{secret_name}': {type(e).__name__}: {e}")
             raise RuntimeError(f"Failed to get details for organization secret '{secret_name}': {e}")
 
-    def list_org_secrets_with_details(self, org: str) -> List[Dict[str, any]]:
+    def list_org_secrets_with_details(self, org: str) -> List[Dict[str, Any]]:
         """List all organization secrets with their visibility and repository selection details.
         
         Args:
@@ -450,25 +450,28 @@ class GitHubClient:
         """
         try:
             organization = self.client.get_organization(org)
-            
-            # If visibility is 'selected', get repository objects
-            selected_repos = None
-            if visibility == 'selected' and selected_repo_names:
+
+            # Handle visibility settings
+            if visibility == "selected":
+                # For 'selected' visibility, we need to handle repository list
                 selected_repos = []
-                for repo_name in selected_repo_names:
-                    try:
-                        repo = organization.get_repo(repo_name)
-                        selected_repos.append(repo)
-                    except Exception as e:
-                        self.log.warn(f"Could not find repository '{repo_name}' in org '{org}': {e}")
-            
-            # Create the secret with visibility settings
-            if visibility == 'selected' and selected_repos is not None:
+                if selected_repo_names:
+                    # Build list of repository objects that exist
+                    for repo_name in selected_repo_names:
+                        try:
+                            repo = organization.get_repo(repo_name)
+                            selected_repos.append(repo)
+                        except Exception as e:
+                            self.log.warn(
+                                f"Could not find repository '{repo_name}' in org '{org}': {e}"
+                            )
+
+                # Create secret with selected visibility (empty list if no repos found)
                 organization.create_secret(
-                    secret_name, 
-                    secret_value, 
+                    secret_name,
+                    secret_value,
                     visibility=visibility,
-                    selected_repositories=selected_repos
+                    selected_repositories=selected_repos,
                 )
                 self.log.debug(
                     f"Created/updated organization secret '{secret_name}' in '{org}' "
@@ -476,12 +479,14 @@ class GitHubClient:
                 )
             else:
                 # For 'all' or 'private', don't pass selected_repositories
-                organization.create_secret(secret_name, secret_value, visibility=visibility)
+                organization.create_secret(
+                    secret_name, secret_value, visibility=visibility
+                )
                 self.log.debug(
                     f"Created/updated organization secret '{secret_name}' in '{org}' "
                     f"with visibility='{visibility}'"
                 )
-            
+
             self._log_rate_limit(f"create_org_secret_with_repos({org}/{secret_name})")
         except Exception as e:
             self.log.error(

@@ -455,10 +455,19 @@ class Migrator:
                 visibility = secret_details["visibility"]
                 source_repos = secret_details["selected_repository_names"]
 
+                # Only do repository matching for 'selected' visibility with repos defined
+                # This handles three scenarios:
+                # 1. visibility != 'selected': pass through as-is
+                # 2. visibility == 'selected' but no source_repos: pass through as-is (empty selection)
+                # 3. visibility == 'selected' with source_repos: validate against target org
                 if visibility == "selected" and source_repos and target_repo_set:
                     # Find matching repositories in target org
-                    matching_repos = [repo for repo in source_repos if repo in target_repo_set]
-                    missing_repos = [repo for repo in source_repos if repo not in target_repo_set]
+                    matching_repos = [
+                        repo for repo in source_repos if repo in target_repo_set
+                    ]
+                    missing_repos = [
+                        repo for repo in source_repos if repo not in target_repo_set
+                    ]
 
                     # Log the results
                     if matching_repos:
@@ -467,7 +476,9 @@ class Migrator:
                             f"repos: {len(matching_repos)}/{len(source_repos)} found in target)"
                         )
                         for repo in matching_repos:
-                            self.log.debug(f"      ✓ Repository '{repo}' found in target org")
+                            self.log.debug(
+                                f"      ✓ Repository '{repo}' found in target org"
+                            )
                     else:
                         self.log.info(
                             f"  - {secret_name} (visibility: {visibility}, "
