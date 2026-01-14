@@ -17,6 +17,9 @@ A tool to migrate GitHub repository secrets from a source repository to a target
 - 📝 Comprehensive logging with verbose mode
 - ✅ Validates PAT permissions before starting migration
 - 🧹 Automatic cleanup of temporary secrets
+- 🏢 Organization-to-organization secret migration with visibility preservation
+- 📋 Smart repository selection: matches source secret repos with target org repos
+- ⚠️ Warning messages for repositories not found in target org
 
 ## Installation
 
@@ -236,6 +239,15 @@ python main.py \
 - Source repository is **required** to host the migration workflow
 - Target repository is optional; if not provided, defaults to the same name as source repo
 - Only organization-level secrets are migrated; repository and environment secrets are ignored
+- **Secret visibility settings are preserved**:
+  - Secrets with `all` visibility: Available to all repositories
+  - Secrets with `private` visibility: Available to private repositories only
+  - Secrets with `selected` visibility: Available to specific repositories
+- **Repository selection handling**:
+  - For secrets with `selected` visibility, the tool attempts to find matching repositories in the target org
+  - Only repositories that exist in both source and target orgs are included in the selection
+  - If a repository from the source selection doesn't exist in the target org, a warning is logged
+  - If no matching repositories exist, the secret is created with `selected` visibility but no repositories assigned
 
 **Example:**
 
@@ -259,6 +271,14 @@ python main.py \
   --org-to-org \
   --verbose
 ```
+
+**Example Scenario - Repository Selection:**
+
+Source Org has secret `API_KEY` with `selected` visibility for repositories: `repo1`, `repo2`, `repo3`
+Target Org has repositories: `repo1`, `repo3`, `repo4`
+
+Result: Secret `API_KEY` is created in target org with `selected` visibility for repositories: `repo1`, `repo3`
+Warning: "Repository 'repo2' not found in target org 'targetorg' for secret 'API_KEY'"
 
 ### With Verbose Logging
 
