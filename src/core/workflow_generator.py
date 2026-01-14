@@ -95,15 +95,10 @@ def generate_org_secret_steps(
             visibility = secret_item.get("visibility", "all")
             selected_repos = secret_item.get("selected_repository_names", [])
 
-        # Build the visibility flags for gh secret set command
-        visibility_flags = f"--visibility {visibility}"
+        # Prepare repository list for selected visibility
+        repos_list = ""
         if visibility == "selected" and selected_repos:
-            # Pass repository names as comma-separated list
             repos_list = ",".join(selected_repos)
-            visibility_flags = f"--visibility selected --repos '{repos_list}'"
-        elif visibility == "selected":
-            # Selected visibility but no repositories (empty selection)
-            visibility_flags = "--visibility selected"
 
         step = f"""      - name: Migrate Org Secret - {secret_name}
         env:
@@ -111,7 +106,7 @@ def generate_org_secret_steps(
           SECRET_NAME: '{secret_name}'
           SECRET_VALUE: ${{{{ secrets.{secret_name} }}}}
           VISIBILITY: '{visibility}'
-          VISIBILITY_FLAGS: '{visibility_flags}'
+          REPOS_LIST: '{repos_list}'
           GH_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_TARGET_PAT }}}}
         run: |
           #!/bin/bash
@@ -123,10 +118,28 @@ def generate_org_secret_steps(
           echo "=========================================="
           
           # Create secret in target organization with visibility settings
-          if gh secret set "$SECRET_NAME" \\
-            --body "$SECRET_VALUE" \\
-            --org "$TARGET_ORG" \\
-            $VISIBILITY_FLAGS; then
+          if [ "$VISIBILITY" = "selected" ] && [ -n "$REPOS_LIST" ]; then
+            # Selected visibility with repositories
+            gh secret set "$SECRET_NAME" \\
+              --body "$SECRET_VALUE" \\
+              --org "$TARGET_ORG" \\
+              --visibility selected \\
+              --repos "$REPOS_LIST"
+          elif [ "$VISIBILITY" = "selected" ]; then
+            # Selected visibility but no repositories (empty selection)
+            gh secret set "$SECRET_NAME" \\
+              --body "$SECRET_VALUE" \\
+              --org "$TARGET_ORG" \\
+              --visibility selected
+          else
+            # All or private visibility
+            gh secret set "$SECRET_NAME" \\
+              --body "$SECRET_VALUE" \\
+              --org "$TARGET_ORG" \\
+              --visibility "$VISIBILITY"
+          fi
+          
+          if [ $? -eq 0 ]; then
             echo "✓ Successfully migrated '$SECRET_NAME' to organization '$TARGET_ORG' with visibility '$VISIBILITY'"
           else
             echo "❌ ERROR: Failed to create secret '$SECRET_NAME' in target organization '$TARGET_ORG'"

@@ -170,101 +170,109 @@ class TestOrgSecretVisibility:
 
 class TestWorkflowGeneratorWithVisibility:
     """Test workflow generation with org secret visibility settings."""
-    
+
     def test_generate_org_secret_steps_all_visibility(self):
         """Test workflow generation for secret with 'all' visibility."""
         org_secrets = [
-            {'name': 'SECRET_ALL', 'visibility': 'all', 'selected_repository_names': []}
+            {"name": "SECRET_ALL", "visibility": "all", "selected_repository_names": []}
         ]
-        result = generate_org_secret_steps(org_secrets, 'target-org')
-        
-        assert 'Migrate Org Secret - SECRET_ALL' in result
+        result = generate_org_secret_steps(org_secrets, "target-org")
+
+        assert "Migrate Org Secret - SECRET_ALL" in result
         assert "VISIBILITY: 'all'" in result
-        assert '--visibility all' in result
-        assert '--repos' not in result
-    
+        # Check that it uses the $VISIBILITY variable in the else branch
+        assert '--visibility "$VISIBILITY"' in result
+
     def test_generate_org_secret_steps_private_visibility(self):
         """Test workflow generation for secret with 'private' visibility."""
         org_secrets = [
-            {'name': 'SECRET_PRIVATE', 'visibility': 'private', 'selected_repository_names': []}
+            {
+                "name": "SECRET_PRIVATE",
+                "visibility": "private",
+                "selected_repository_names": [],
+            }
         ]
-        result = generate_org_secret_steps(org_secrets, 'target-org')
-        
-        assert 'Migrate Org Secret - SECRET_PRIVATE' in result
+        result = generate_org_secret_steps(org_secrets, "target-org")
+
+        assert "Migrate Org Secret - SECRET_PRIVATE" in result
         assert "VISIBILITY: 'private'" in result
-        assert '--visibility private' in result
-        assert '--repos' not in result
-    
+        assert '--visibility "$VISIBILITY"' in result
+
     def test_generate_org_secret_steps_selected_visibility_with_repos(self):
         """Test workflow generation for secret with 'selected' visibility and repositories."""
         org_secrets = [
             {
-                'name': 'SECRET_SELECTED',
-                'visibility': 'selected',
-                'selected_repository_names': ['repo1', 'repo2']
+                "name": "SECRET_SELECTED",
+                "visibility": "selected",
+                "selected_repository_names": ["repo1", "repo2"],
             }
         ]
-        result = generate_org_secret_steps(org_secrets, 'target-org')
-        
-        assert 'Migrate Org Secret - SECRET_SELECTED' in result
+        result = generate_org_secret_steps(org_secrets, "target-org")
+
+        assert "Migrate Org Secret - SECRET_SELECTED" in result
         assert "VISIBILITY: 'selected'" in result
-        assert '--visibility selected' in result
-        assert "--repos 'repo1,repo2'" in result
-    
+        assert '--repos "$REPOS_LIST"' in result
+        assert "REPOS_LIST: 'repo1,repo2'" in result
+
     def test_generate_org_secret_steps_selected_visibility_no_repos(self):
         """Test workflow generation for secret with 'selected' visibility but no repositories."""
         org_secrets = [
             {
-                'name': 'SECRET_SELECTED_EMPTY',
-                'visibility': 'selected',
-                'selected_repository_names': []
+                "name": "SECRET_SELECTED_EMPTY",
+                "visibility": "selected",
+                "selected_repository_names": [],
             }
         ]
-        result = generate_org_secret_steps(org_secrets, 'target-org')
-        
-        assert 'Migrate Org Secret - SECRET_SELECTED_EMPTY' in result
+        result = generate_org_secret_steps(org_secrets, "target-org")
+
+        assert "Migrate Org Secret - SECRET_SELECTED_EMPTY" in result
         assert "VISIBILITY: 'selected'" in result
-        assert '--visibility selected' in result
-        # Should not have --repos flag when list is empty
-        assert "--repos" not in result or "--repos ''" in result
-    
+        # Check that it handles empty REPOS_LIST correctly
+        assert "REPOS_LIST: ''" in result
+        # This should use the elif branch (no --repos flag)
+        assert 'elif [ "$VISIBILITY" = "selected" ]; then' in result
+
     def test_generate_org_secret_steps_legacy_format(self):
         """Test workflow generation with legacy format (list of strings)."""
-        org_secrets = ['SECRET1', 'SECRET2', 'SECRET3']
-        result = generate_org_secret_steps(org_secrets, 'target-org')
-        
+        org_secrets = ["SECRET1", "SECRET2", "SECRET3"]
+        result = generate_org_secret_steps(org_secrets, "target-org")
+
         # Should default to 'all' visibility for legacy format
-        assert 'Migrate Org Secret - SECRET1' in result
-        assert 'Migrate Org Secret - SECRET2' in result
-        assert 'Migrate Org Secret - SECRET3' in result
+        assert "Migrate Org Secret - SECRET1" in result
+        assert "Migrate Org Secret - SECRET2" in result
+        assert "Migrate Org Secret - SECRET3" in result
         assert "VISIBILITY: 'all'" in result
-        assert '--visibility all' in result
-    
+        assert '--visibility "$VISIBILITY"' in result
+
     def test_generate_org_secret_steps_mixed_visibility(self):
         """Test workflow generation with multiple secrets of different visibility."""
         org_secrets = [
-            {'name': 'SECRET_ALL', 'visibility': 'all', 'selected_repository_names': []},
-            {'name': 'SECRET_PRIVATE', 'visibility': 'private', 'selected_repository_names': []},
+            {"name": "SECRET_ALL", "visibility": "all", "selected_repository_names": []},
             {
-                'name': 'SECRET_SELECTED',
-                'visibility': 'selected',
-                'selected_repository_names': ['repo1', 'repo2', 'repo3']
+                "name": "SECRET_PRIVATE",
+                "visibility": "private",
+                "selected_repository_names": [],
+            },
+            {
+                "name": "SECRET_SELECTED",
+                "visibility": "selected",
+                "selected_repository_names": ["repo1", "repo2", "repo3"],
             },
         ]
-        result = generate_org_secret_steps(org_secrets, 'target-org')
-        
+        result = generate_org_secret_steps(org_secrets, "target-org")
+
         # Check all secrets are present
-        assert 'Migrate Org Secret - SECRET_ALL' in result
-        assert 'Migrate Org Secret - SECRET_PRIVATE' in result
-        assert 'Migrate Org Secret - SECRET_SELECTED' in result
-        
+        assert "Migrate Org Secret - SECRET_ALL" in result
+        assert "Migrate Org Secret - SECRET_PRIVATE" in result
+        assert "Migrate Org Secret - SECRET_SELECTED" in result
+
         # Check visibility settings
         assert "VISIBILITY: 'all'" in result
         assert "VISIBILITY: 'private'" in result
         assert "VISIBILITY: 'selected'" in result
-        
+
         # Check repository selection
-        assert "--repos 'repo1,repo2,repo3'" in result
+        assert "REPOS_LIST: 'repo1,repo2,repo3'" in result
 
 
 class TestRepositoryMatching:

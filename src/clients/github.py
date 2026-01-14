@@ -338,7 +338,7 @@ class GitHubClient:
             organization = self.client.get_organization(org)
             secret = organization.get_secret(secret_name)
             
-            visibility = secret.visibility if hasattr(secret, 'visibility') else 'all'
+            visibility = getattr(secret, 'visibility', 'all')
             selected_repos = []
             
             # Only fetch selected repositories if visibility is 'selected'
@@ -379,7 +379,7 @@ class GitHubClient:
             secrets_details = []
             for secret in secrets:
                 try:
-                    visibility = secret.visibility if hasattr(secret, 'visibility') else 'all'
+                    visibility = getattr(secret, 'visibility', 'all')
                     selected_repos = []
                     
                     # Only fetch selected repositories if visibility is 'selected'
