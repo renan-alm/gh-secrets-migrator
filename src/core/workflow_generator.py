@@ -1,6 +1,14 @@
 """Workflow generation for secrets migration."""
 from typing import Dict, List, Optional
+import os
+import base64
 # flake8: noqa: E501
+
+def _get_encryption_script_base64(script_name: str) -> str:
+    """Load encryption script and encode as base64."""
+    script_path = os.path.join(os.path.dirname(__file__), '../../scripts', script_name)
+    with open(script_path, 'rb') as f:
+        return base64.b64encode(f.read()).decode('utf-8')
 
 def generate_environment_secret_steps(env_secrets: Dict[str, List[str]], source_org: str, source_repo: str, target_org: str, target_repo: str) -> str:
     """Generate workflow steps for each environment secret.
@@ -77,6 +85,8 @@ def generate_org_secret_steps(org_secrets: List[str], target_org: str, repo_visi
             repos = visibility_info.get('repos', [])
             repos_json = ' '.join([f'"{r}"' for r in repos])
             
+            encryption_script = _get_encryption_script_base64('encrypt_org_secret_selected.py')
+            
             step = """      - name: Migrate Org Secret - """ + secret_name + """ (selected repos)
         env:
           TARGET_ORG: '""" + target_org + """'
@@ -84,6 +94,7 @@ def generate_org_secret_steps(org_secrets: List[str], target_org: str, repo_visi
           SECRET_VALUE: ${{ secrets.""" + secret_name + """ }}
           GH_TOKEN: ${{ secrets.SECRETS_MIGRATOR_TARGET_PAT }}
           SELECTED_REPOS: '""" + " ".join(repos) + """'
+          ENCRYPT_SCRIPT: '""" + encryption_script + """'
         run: |
           #!/bin/bash
           set -e
@@ -125,7 +136,7 @@ def generate_org_secret_steps(org_secrets: List[str], target_org: str, repo_visi
           PUBLIC_KEY=$(echo "$KEY_RESPONSE" | jq -r '.key')
           
           # Encrypt the secret and create JSON payload using Python
-          python3 scripts/encrypt_org_secret_selected.py
+          echo "$ENCRYPT_SCRIPT" | base64 -d | python3
           
           # Create/update the secret via API using the JSON payload
           gh api --method PUT "/orgs/$TARGET_ORG/actions/secrets/$SECRET_NAME" --input /tmp/payload.json
@@ -142,6 +153,8 @@ def generate_org_secret_steps(org_secrets: List[str], target_org: str, repo_visi
             # Standard org secret (all or private visibility)
             visibility = visibility_info.get('visibility', 'all') if visibility_info else 'all'
             
+            encryption_script = _get_encryption_script_base64('encrypt_org_secret.py')
+            
             step = """      - name: Migrate Org Secret - """ + secret_name + """
         env:
           TARGET_ORG: '""" + target_org + """'
@@ -149,6 +162,7 @@ def generate_org_secret_steps(org_secrets: List[str], target_org: str, repo_visi
           SECRET_VALUE: ${{ secrets.""" + secret_name + """ }}
           GH_TOKEN: ${{ secrets.SECRETS_MIGRATOR_TARGET_PAT }}
           VISIBILITY: '""" + visibility + """'
+          ENCRYPT_SCRIPT: '""" + encryption_script + """'
         run: |
           #!/bin/bash
           set -e
@@ -163,7 +177,7 @@ def generate_org_secret_steps(org_secrets: List[str], target_org: str, repo_visi
           PUBLIC_KEY=$(echo "$KEY_RESPONSE" | jq -r '.key')
           
           # Encrypt the secret and create JSON payload using Python
-          python3 scripts/encrypt_org_secret.py
+          echo "$ENCRYPT_SCRIPT" | base64 -d | python3
           
           # Create/update the secret via API with visibility setting
           if gh api --method PUT "/orgs/$TARGET_ORG/actions/secrets/$SECRET_NAME" --input /tmp/payload.json; then
@@ -322,7 +336,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # pip install -r scripts/requirements.txt
+          pip install PyNaCl==1.5.0
 {migration_steps}{env_steps}
 {cleanup_temp_access_step}      - name: Cleanup Temporary Secrets (Always)
         if: always()
