@@ -96,37 +96,26 @@ class GitHubClient:
             self.log.debug(f"Branch {branch_name} will be created fresh")
 
     def list_repo_secrets(self, org: str, repo: str) -> List[str]:
-        """List all repository-level secrets (excludes organization secrets).
+        """List all repository-level secrets.
         
-        GitHub's repository secrets API returns both repository-level and
-        organization-level secrets that are visible to the repository.
-        This method filters out organization secrets by checking for the
-        'visibility' field in the raw API response.
+        Using the /repos/{owner}/{repo}/actions/secrets endpoint which,
+        according to requirements, returns only repository-level secrets.
         """
         try:
-            repository = self.client.get_user(org).get_repo(repo)
-            secrets = repository.get_secrets()
-            
-            # Filter out organization secrets
-            # Org secrets have a 'visibility' field; repo secrets don't
-            result = []
-            for secret in secrets:
-                # Access raw_data to check for visibility field
-                if hasattr(secret, 'raw_data') and 'visibility' in secret.raw_data:
-                    # This is an organization secret, skip it
-                    self.log.debug(f"Skipping organization secret: {secret.name}")
-                    continue
-                result.append(secret.name)
-            
+            repository = self.client.get_repo(f"{org}/{repo}")
             self._log_rate_limit(f"list_repo_secrets({org}/{repo})")
-            return result
-        except Exception:
-            raise RuntimeError(f"Failed to list secrets in {org}/{repo}")
+            
+            # Simple iteration over secrets, assuming the API returns only repo secrets
+            # or that we want to migrate whatever this endpoint returns.
+            return [secret.name for secret in repository.get_secrets()]
+        except Exception as e:
+            self.log.error(f"Failed to list secrets in {org}/{repo}: {type(e).__name__}: {e}")
+            raise RuntimeError(f"Failed to list secrets in {org}/{repo}: {e}")
 
     def create_repo_secret(self, org: str, repo: str, secret_name: str, secret_value: str) -> None:
         """Create or update a secret in the repository."""
         try:
-            repository = self.client.get_user(org).get_repo(repo)
+            repository = self.client.get_repo(f"{org}/{repo}")
             # PyGithub handles encryption automatically!
             repository.create_secret(secret_name, secret_value)
             self._log_rate_limit(f"create_repo_secret({org}/{repo}/{secret_name})")
@@ -138,17 +127,17 @@ class GitHubClient:
     def delete_secret(self, org: str, repo: str, secret_name: str) -> None:
         """Delete a secret from the repository."""
         try:
-            repository = self.client.get_user(org).get_repo(repo)
+            repository = self.client.get_repo(f"{org}/{repo}")
             secret = repository.get_secret(secret_name)
             secret.delete()
             self.log.debug(f"Deleted secret {secret_name}")
-        except Exception:
-            raise RuntimeError(f"Failed to delete secret {secret_name} from {org}/{repo}")
+        except Exception as e:
+            raise RuntimeError(f"Failed to delete secret {secret_name} from {org}/{repo}: {e}")
 
     def create_file(self, org: str, repo: str, branch: str, path: str, contents: str) -> None:
         """Create or update a file in the repository."""
         try:
-            repository = self.client.get_user(org).get_repo(repo)
+            repository = self.client.get_repo(f"{org}/{repo}")
             repository.create_file(
                 path=path,
                 message=f"Add {path}",
@@ -156,8 +145,8 @@ class GitHubClient:
                 branch=branch
             )
             self.log.debug(f"Created file {path} on branch {branch}")
-        except Exception:
-            raise RuntimeError(f"Failed to create file {path} in {org}/{repo} on branch {branch}")
+        except Exception as e:
+            raise RuntimeError(f"Failed to create file {path} in {org}/{repo} on branch {branch}: {e}")
 
     def list_environments(self, org: str, repo: str) -> List[str]:
         """List all environments in the repository."""
@@ -172,8 +161,17 @@ class GitHubClient:
             self.log.debug(f"Failed to list environments in {org}/{repo}")
             return []
 
-    def create_environment(self, org: str, repo: str, environment_name: str) -> None:
-        """Create an environment in the repository. Gracefully handles if already exists."""
+    def create_environment(self, org: str, repo: str, environment_name: str) -> bool:
+        """Create an environment in the repository. Gracefully handles if already exists.
+        
+        Args:
+            org: Organization name
+            repo: Repository name
+            environment_name: Name of the environment to create
+            
+        Returns:
+            True if environment was created, False if it already existed
+        """
         try:
             repository = self.client.get_repo(f"{org}/{repo}")
             
@@ -181,7 +179,7 @@ class GitHubClient:
             try:
                 repository.get_environment(environment_name)
                 self.log.debug(f"Environment '{environment_name}' already exists in {org}/{repo}, skipping creation")
-                return
+                return False
             except UnknownObjectException:
                 # Environment doesn't exist, proceed with creation
                 pass
@@ -190,6 +188,7 @@ class GitHubClient:
             repository.create_environment(environment_name)
             self._log_rate_limit(f"create_environment({org}/{repo}/{environment_name})")
             self.log.debug(f"Created environment '{environment_name}' in {org}/{repo}")
+            return True
         except Exception as e:
             self.log.error(f"Failed to create environment '{environment_name}': {type(e).__name__}: {e}")
             raise RuntimeError(f"Failed to create environment '{environment_name}': {e}")

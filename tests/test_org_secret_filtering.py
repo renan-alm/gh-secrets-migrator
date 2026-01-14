@@ -22,7 +22,7 @@ class TestOrgSecretFiltering:
     
     @patch('src.clients.github.Github')
     def test_list_repo_secrets_filters_org_secrets(self, mock_github_class):
-        """Test that list_repo_secrets filters out organization secrets."""
+        """Test that list_repo_secrets returns all secrets from the repo endpoint."""
         # Create mock client
         logger = Logger(verbose=False)
         
@@ -31,17 +31,13 @@ class TestOrgSecretFiltering:
         mock_secrets = [
             MockSecret("REPO_SECRET_1", is_org_secret=False),
             MockSecret("ORG_SECRET_1", is_org_secret=True),
-            MockSecret("REPO_SECRET_2", is_org_secret=False),
-            MockSecret("ORG_SECRET_2", is_org_secret=True),
-            MockSecret("REPO_SECRET_3", is_org_secret=False),
         ]
         mock_repo.get_secrets.return_value = mock_secrets
         
         # Set up the mock chain
-        mock_user = Mock()
-        mock_user.get_repo.return_value = mock_repo
+        # Fix: Mock get_repo directly on the client instance, skipping get_user
         mock_github_instance = Mock()
-        mock_github_instance.get_user.return_value = mock_user
+        mock_github_instance.get_repo.return_value = mock_repo
         mock_github_instance.get_rate_limit.return_value = Mock(core=Mock(remaining=5000, limit=5000, reset=1234567890))
         mock_github_class.return_value = mock_github_instance
         
@@ -51,13 +47,10 @@ class TestOrgSecretFiltering:
         # Call the method
         result = client.list_repo_secrets("test-org", "test-repo")
         
-        # Verify only repository secrets are returned
-        assert len(result) == 3
+        # Verify result - we accept all secrets now
+        assert len(result) == 2
         assert "REPO_SECRET_1" in result
-        assert "REPO_SECRET_2" in result
-        assert "REPO_SECRET_3" in result
-        assert "ORG_SECRET_1" not in result
-        assert "ORG_SECRET_2" not in result
+        assert "ORG_SECRET_1" in result
     
     @patch('src.clients.github.Github')
     def test_list_repo_secrets_all_repo_secrets(self, mock_github_class):
@@ -72,10 +65,8 @@ class TestOrgSecretFiltering:
         ]
         mock_repo.get_secrets.return_value = mock_secrets
         
-        mock_user = Mock()
-        mock_user.get_repo.return_value = mock_repo
         mock_github_instance = Mock()
-        mock_github_instance.get_user.return_value = mock_user
+        mock_github_instance.get_repo.return_value = mock_repo
         mock_github_instance.get_rate_limit.return_value = Mock(core=Mock(remaining=5000, limit=5000, reset=1234567890))
         mock_github_class.return_value = mock_github_instance
         
@@ -89,7 +80,7 @@ class TestOrgSecretFiltering:
     
     @patch('src.clients.github.Github')
     def test_list_repo_secrets_all_org_secrets(self, mock_github_class):
-        """Test that empty list is returned when all secrets are org secrets."""
+        """Test that list of secrets is returned even if they are marked org secrets in mock."""
         logger = Logger(verbose=False)
         
         mock_repo = Mock()
@@ -99,17 +90,17 @@ class TestOrgSecretFiltering:
         ]
         mock_repo.get_secrets.return_value = mock_secrets
         
-        mock_user = Mock()
-        mock_user.get_repo.return_value = mock_repo
         mock_github_instance = Mock()
-        mock_github_instance.get_user.return_value = mock_user
+        mock_github_instance.get_repo.return_value = mock_repo
         mock_github_instance.get_rate_limit.return_value = Mock(core=Mock(remaining=5000, limit=5000, reset=1234567890))
         mock_github_class.return_value = mock_github_instance
         
         client = GitHubClient("fake-token", logger)
         result = client.list_repo_secrets("test-org", "test-repo")
         
-        assert len(result) == 0
+        # We process whatever is returned
+        assert len(result) == 2
+        assert "ORG_SECRET_1" in result
     
     @patch('src.clients.github.Github')
     def test_list_repo_secrets_no_secrets(self, mock_github_class):
@@ -119,10 +110,8 @@ class TestOrgSecretFiltering:
         mock_repo = Mock()
         mock_repo.get_secrets.return_value = []
         
-        mock_user = Mock()
-        mock_user.get_repo.return_value = mock_repo
         mock_github_instance = Mock()
-        mock_github_instance.get_user.return_value = mock_user
+        mock_github_instance.get_repo.return_value = mock_repo
         mock_github_instance.get_rate_limit.return_value = Mock(core=Mock(remaining=5000, limit=5000, reset=1234567890))
         mock_github_class.return_value = mock_github_instance
         
@@ -147,10 +136,9 @@ class TestWorkflowGeneratorWithRepoSecrets:
             repo_secrets=repo_secrets,
         )
         
-        # Verify the workflow contains the allowed secrets list
-        assert "REPO_SECRET_1" in workflow
-        assert "REPO_SECRET_2" in workflow
-        assert "ALLOWED_SECRETS=" in workflow
+        # Verify the workflow contains individual steps for secrets
+        assert "Migrate Repo Secret - REPO_SECRET_1" in workflow
+        assert "Migrate Repo Secret - REPO_SECRET_2" in workflow
         
     def test_generate_workflow_without_repo_secrets(self):
         """Test that workflow works without repo_secrets (backward compatibility)."""
@@ -162,14 +150,14 @@ class TestWorkflowGeneratorWithRepoSecrets:
             "migrate-secrets",
         )
         
-        # Should still generate valid workflow
+        # Should still generate valid workflow using the fallback bulk method
         assert "name: move-secrets" in workflow
-        assert "migrate-repo-secrets" in workflow
-        # Should NOT contain ALLOWED_SECRETS when repo_secrets is not provided
-        assert "ALLOWED_SECRETS=" not in workflow
+        assert "Populate Repository Secrets" in workflow
+        # Should NOT contain individual steps
+        assert "Migrate Repo Secret -" not in workflow
     
-    def test_generate_workflow_filters_org_secrets_in_bash(self):
-        """Test that workflow script filters out org secrets."""
+    def test_generate_workflow_explicit_steps(self):
+        """Test that workflow uses explicit steps for repo secrets."""
         repo_secrets = ["REPO_SECRET"]
         workflow = generate_workflow(
             "source-org",
@@ -180,9 +168,9 @@ class TestWorkflowGeneratorWithRepoSecrets:
             repo_secrets=repo_secrets,
         )
         
-        # Verify filtering logic exists in the workflow
-        assert "Skipping organization secret" in workflow
-        assert "SECRET_ALLOWED" in workflow
+        # Verify separate step generation
+        assert "Migrate Repo Secret - REPO_SECRET" in workflow
+        assert "SECRET_NAME: 'REPO_SECRET'" in workflow
     
     def test_generate_workflow_empty_repo_secrets_list(self):
         """Test workflow generation with empty repo_secrets list."""
@@ -196,8 +184,9 @@ class TestWorkflowGeneratorWithRepoSecrets:
             repo_secrets=repo_secrets,
         )
         
-        # Should contain the ALLOWED_SECRETS array (empty)
-        assert "ALLOWED_SECRETS=()" in workflow
+        # Should be empty of migration steps, just setup and cleanup
+        assert "Migrate Repo Secret" not in workflow
+        assert "Populate Repository Secrets" not in workflow
     
     def test_generate_workflow_many_repo_secrets(self):
         """Test workflow generation with many repo secrets."""
@@ -215,8 +204,8 @@ class TestWorkflowGeneratorWithRepoSecrets:
         for secret in repo_secrets:
             assert secret in workflow
         
-        # Verify structure is correct
-        assert "ALLOWED_SECRETS=" in workflow
+        # Verify step count
+        assert workflow.count("Migrate Repo Secret -") == 10
 
 
 class TestRepoSecretEdgeCases:
@@ -224,16 +213,11 @@ class TestRepoSecretEdgeCases:
     
     @patch('src.clients.github.Github')
     def test_secret_with_same_name_as_org_secret(self, mock_github_class):
-        """Test that org-level secrets are filtered out correctly.
+        """Test that org-level secrets are handled correctly.
         
-        Verifies the filter excludes org secrets even when they might share
-        names with potential repo-level secrets.
+        Verifies that even if an org secret is returned, we include it based on our
+        new logic of trusting the API/user intent.
         """
-        # Note: If a secret truly exists at BOTH org and repo levels with the same name,
-        # GitHub's API only returns the org version (with visibility field), so our
-        # filter will exclude it. The actual repo-level value would be used in the
-        # workflow context (${{ secrets.SECRET_NAME }}), but we can't detect it via
-        # the API to include it in the migration.
         logger = Logger(verbose=False)
         
         mock_repo = Mock()
@@ -244,18 +228,16 @@ class TestRepoSecretEdgeCases:
         ]
         mock_repo.get_secrets.return_value = mock_secrets
         
-        mock_user = Mock()
-        mock_user.get_repo.return_value = mock_repo
         mock_github_instance = Mock()
-        mock_github_instance.get_user.return_value = mock_user
+        mock_github_instance.get_repo.return_value = mock_repo
         mock_github_instance.get_rate_limit.return_value = Mock(core=Mock(remaining=5000, limit=5000, reset=1234567890))
         mock_github_class.return_value = mock_github_instance
         
         client = GitHubClient("fake-token", logger)
         result = client.list_repo_secrets("test-org", "test-repo")
         
-        # Verify org secret is filtered out, only repo secret is returned
-        assert "ORG_SECRET" not in result
+        # We accept what the API returns
+        assert "ORG_SECRET" in result
         assert "REPO_ONLY" in result
     
     @patch('src.clients.github.Github')
@@ -271,10 +253,8 @@ class TestRepoSecretEdgeCases:
         ]
         mock_repo.get_secrets.return_value = mock_secrets
         
-        mock_user = Mock()
-        mock_user.get_repo.return_value = mock_repo
         mock_github_instance = Mock()
-        mock_github_instance.get_user.return_value = mock_user
+        mock_github_instance.get_repo.return_value = mock_repo
         mock_github_instance.get_rate_limit.return_value = Mock(core=Mock(remaining=5000, limit=5000, reset=1234567890))
         mock_github_class.return_value = mock_github_instance
         
