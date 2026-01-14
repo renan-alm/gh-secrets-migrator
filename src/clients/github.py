@@ -1,7 +1,7 @@
 """GitHub API client wrapper."""
 # flake8: noqa: E501
 from typing import List
-from github import Github
+from github import Github, UnknownObjectException
 from src.utils.logger import Logger
 
 
@@ -162,11 +162,11 @@ class GitHubClient:
             
             # Check if environment already exists
             try:
-                existing_env = repository.get_environment(environment_name)
+                repository.get_environment(environment_name)
                 self._log_rate_limit(f"get_environment({org}/{repo}/{environment_name})")
                 self.log.debug(f"Environment '{environment_name}' already exists in {org}/{repo}, skipping creation")
                 return
-            except Exception:
+            except UnknownObjectException:
                 # Environment doesn't exist, proceed with creation
                 pass
             

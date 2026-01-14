@@ -1,6 +1,7 @@
 """Tests for GitHub client module."""
 from unittest.mock import Mock, patch
 import pytest
+from github import UnknownObjectException
 from src.clients.github import GitHubClient
 from src.utils.logger import Logger
 
@@ -28,7 +29,9 @@ class TestGitHubClientEnvironments:
         """Test creating an environment that doesn't exist."""
         # Setup mocks
         mock_repo = Mock()
-        mock_repo.get_environment.side_effect = Exception("Not Found")
+        mock_repo.get_environment.side_effect = UnknownObjectException(
+            404, "Not Found", None
+        )
         mock_repo.create_environment = Mock()
         github_client.client.get_repo.return_value = mock_repo
 
@@ -68,7 +71,9 @@ class TestGitHubClientEnvironments:
         """Test handling of errors during environment creation."""
         # Setup mocks
         mock_repo = Mock()
-        mock_repo.get_environment.side_effect = Exception("Not Found")
+        mock_repo.get_environment.side_effect = UnknownObjectException(
+            404, "Not Found", None
+        )
         mock_repo.create_environment.side_effect = Exception("Permission denied")
         github_client.client.get_repo.return_value = mock_repo
 
@@ -95,7 +100,9 @@ class TestGitHubClientEnvironments:
         """Test creating environment with special characters in name."""
         # Setup mocks
         mock_repo = Mock()
-        mock_repo.get_environment.side_effect = Exception("Not Found")
+        mock_repo.get_environment.side_effect = UnknownObjectException(
+            404, "Not Found", None
+        )
         mock_repo.create_environment = Mock()
         github_client.client.get_repo.return_value = mock_repo
 
