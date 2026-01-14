@@ -603,7 +603,8 @@ class Migrator:
         workflow = generate_workflow(
             self.config.source_org, self.config.source_repo,
             self.config.target_org, self.config.target_repo, branch_name,
-            env_secrets_info
+            env_secrets_info,
+            repo_secrets=secrets_to_migrate
         )
         self.log.debug("Creating workflow file...")
         self.source_api.create_file(

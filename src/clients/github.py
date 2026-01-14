@@ -96,11 +96,28 @@ class GitHubClient:
             self.log.debug(f"Branch {branch_name} will be created fresh")
 
     def list_repo_secrets(self, org: str, repo: str) -> List[str]:
-        """List all secrets in the repository."""
+        """List all repository-level secrets (excludes organization secrets).
+        
+        GitHub's repository secrets API returns both repository-level and
+        organization-level secrets that are visible to the repository.
+        This method filters out organization secrets by checking for the
+        'visibility' field in the raw API response.
+        """
         try:
             repository = self.client.get_user(org).get_repo(repo)
             secrets = repository.get_secrets()
-            result = [secret.name for secret in secrets]
+            
+            # Filter out organization secrets
+            # Org secrets have a 'visibility' field; repo secrets don't
+            result = []
+            for secret in secrets:
+                # Access raw_data to check for visibility field
+                if hasattr(secret, 'raw_data') and 'visibility' in secret.raw_data:
+                    # This is an organization secret, skip it
+                    self.log.debug(f"Skipping organization secret: {secret.name}")
+                    continue
+                result.append(secret.name)
+            
             self._log_rate_limit(f"list_repo_secrets({org}/{repo})")
             return result
         except Exception:
