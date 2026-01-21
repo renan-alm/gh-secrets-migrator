@@ -132,19 +132,20 @@ services:
 
 ### Automated Publishing (CI/CD)
 
-The repository includes a GitHub Actions workflow (`.github/workflows/publish-ghcr.yml`) that automatically publishes Docker images to GHCR on:
+The repository includes GitHub Actions workflows that automatically publish Docker images to GHCR:
 
-- **Release creation**: When you create a release (e.g., `v1.0.0`), the image is tagged with that version
-- **Push to master**: Pushes to master automatically tag as `latest`
-- **Semver tags**: Pushes of version tags (e.g., `v1.2.3`) are tagged with major.minor versions too
+- **On successful release**: When the Release workflow completes successfully (triggered by pushing a `v*` tag), the Docker image is automatically built and pushed
+- **Pull requests to master**: Docker images are built (but not pushed) to validate the Dockerfile
 
-**How it works:**
+**Release workflow:**
 
-1. Create a release on GitHub (or push a tag like `v1.2.3`)
-2. Workflow automatically builds and pushes to `ghcr.io/renan-alm/gh-secrets-migrator:v1.2.3`
-3. Package automatically links to your repository
+1. Push a version tag: `git tag v1.2.3 && git push origin v1.2.3`
+2. Release workflow validates changelog entry exists and tests passed
+3. Builds binaries for Windows, macOS, and Linux
+4. Creates GitHub Release with artifacts and SHA256 checksums
+5. On success, triggers Docker publish to `ghcr.io/renan-alm/gh-secrets-migrator:v1.2.3`
 
-**No manual steps needed**—just release and the Docker image is published!
+**No manual steps needed**—just push a tag and the release + Docker image are published!
 
 ## Permissions
 
