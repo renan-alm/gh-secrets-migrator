@@ -9,6 +9,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes yet._
 
+## [0.3.0] - 2026-01-21
+
+### Added
+
+- Rate limit watcher for GitHub API requests with automatic handling
+- Dependabot configuration for automated dependency updates
+- Pre-release checklist workflow for ensuring quality before releases
+- Cross-platform build and release pipeline supporting Linux, macOS, and Windows
+- Environment file (.env.example) for easier configuration management
+- GitHub Copilot instructions for better AI-assisted development
+
+### Improved
+
+- Organization secrets are now filtered out during repository-to-repository migrations
+- Environment creation logic now checks for existing environments to prevent overwriting configurations
+- Enhanced CLI with better repository requirement messages
+- Docker build process with updated configuration
+- Comprehensive test coverage including organization secret filtering tests
+- Enhanced workflow generator to handle repository-specific secrets
+
+### Changed
+
+- **Breaking**: Removed Python 3.8 and 3.9 support (now requires Python 3.10+)
+- Consolidated CI/CD workflows (merged CI.yml and lint.yml into test-and-lint.yml)
+- Updated GitHub Actions dependencies to latest versions
+- Enhanced Makefile with improved cross-platform compatibility
+
+### Fixed
+
+- Environment overwrite issue in repository-to-repository migrations
+- Cross-platform compatibility issues in build system and CI workflow
+- Badge rendering in README
+
 ## [0.2.0] - 2025-11-14
 
 ### Added
@@ -55,6 +88,7 @@ _No unreleased changes yet._
 - Support for both explicit PATs and GITHUB_TOKEN environment variable
 - Verbose logging mode for debugging
 
-[Unreleased]: https://github.com/renan-alm/gh-secrets-migrator/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/renan-alm/gh-secrets-migrator/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/renan-alm/gh-secrets-migrator/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/renan-alm/gh-secrets-migrator/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/renan-alm/gh-secrets-migrator/releases/tag/v0.1.0
