@@ -21,15 +21,75 @@ jobs:
         id: version
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
-      - name: Validate changelog entry exists
+      - name: Get previous tag
+        id: prev_tag
+        run: |
+          # Get the tag before the current one
+          PREV_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]' | head -2 | tail -1)
+          if [ -z "$PREV_TAG" ]; then
+            # If no previous tag, use the first commit
+            PREV_TAG=$(git rev-list --max-parents=0 HEAD)
+          fi
+          echo "prev_tag=$PREV_TAG" >> $GITHUB_OUTPUT
+          echo "📌 Previous tag: $PREV_TAG"
+
+      - name: Generate and update CHANGELOG
         run: |
           VERSION=${{ steps.version.outputs.version }}
-          if ! grep -q "^## \[$VERSION\]" CHANGELOG.md; then
-            echo "::error::No changelog entry found for version $VERSION in CHANGELOG.md"
-            echo "Please add a changelog entry before releasing."
-            exit 1
+          PREV_TAG=${{ steps.prev_tag.outputs.prev_tag }}
+          CURRENT_TAG="v$VERSION"
+          DATE=$(date +%Y-%m-%d)
+          
+          echo "📝 Generating changelog for $PREV_TAG..$CURRENT_TAG"
+          
+          # Generate commit list to a temp file
+          git log --format="- %s (%h)" --no-merges "$PREV_TAG".."$CURRENT_TAG" | head -50 > /tmp/commits.txt
+          
+          if [ ! -s /tmp/commits.txt ]; then
+            echo "⚠️ No commits found between $PREV_TAG and $CURRENT_TAG"
+            echo "- Release $VERSION" > /tmp/commits.txt
           fi
-          echo "✅ Changelog entry found for version $VERSION"
+          
+          # Create the new changelog entry file
+          echo "## [$VERSION] - $DATE" > /tmp/new_entry.txt
+          echo "" >> /tmp/new_entry.txt
+          cat /tmp/commits.txt >> /tmp/new_entry.txt
+          echo "" >> /tmp/new_entry.txt
+          
+          # Find insertion point (after [Unreleased] section or after header)
+          if grep -n "^## \[Unreleased\]" CHANGELOG.md > /dev/null; then
+            # Find the next ## heading after [Unreleased]
+            UNRELEASED_LINE=$(grep -n "^## \[Unreleased\]" CHANGELOG.md | cut -d: -f1)
+            NEXT_SECTION=$(tail -n +"$((UNRELEASED_LINE + 1))" CHANGELOG.md | grep -n "^## \[" | head -1 | cut -d: -f1)
+            
+            if [ -n "$NEXT_SECTION" ]; then
+              INSERT_LINE=$((UNRELEASED_LINE + NEXT_SECTION - 1))
+            else
+              # No next section, append at end
+              INSERT_LINE=$(wc -l < CHANGELOG.md)
+            fi
+          else
+            # Insert after header (line 7)
+            INSERT_LINE=7
+          fi
+          
+          # Reconstruct the file
+          head -n "$INSERT_LINE" CHANGELOG.md > /tmp/changelog_new.md
+          cat /tmp/new_entry.txt >> /tmp/changelog_new.md
+          tail -n +"$((INSERT_LINE + 1))" CHANGELOG.md >> /tmp/changelog_new.md
+          mv /tmp/changelog_new.md CHANGELOG.md
+          
+          echo "✅ Changelog updated for version $VERSION"
+          echo "--- Preview ---"
+          head -40 CHANGELOG.md
+
+      - name: Commit and push CHANGELOG
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git commit -m "docs: update CHANGELOG for v${{ steps.version.outputs.version }}" || echo "No changes to commit"
+          git push origin HEAD:master
 
       - name: Verify tests passed on master
         uses: actions/github-script@v8
