@@ -25,7 +25,7 @@ jobs:
         id: prev_tag
         run: |
           # Get the tag before the current one
-          PREV_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]' | head -2 | tail -1)
+          PREV_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -2 | tail -1)
           if [ -z "$PREV_TAG" ]; then
             # If no previous tag, use the first commit
             PREV_TAG=$(git rev-list --max-parents=0 HEAD)
@@ -39,7 +39,7 @@ jobs:
           VERSION=${{ steps.version.outputs.version }}
           PREV_TAG=${{ steps.prev_tag.outputs.prev_tag }}
           CURRENT_TAG="v$VERSION"
-          DATE=$(date +%Y-%m-%d)
+          DATE=$(date -u +%Y-%m-%d)
           
           echo "📝 Generating changelog for $PREV_TAG..$CURRENT_TAG"
           
@@ -121,7 +121,7 @@ jobs:
             NEXT_SECTION=$(tail -n +"$((UNRELEASED_LINE + 1))" CHANGELOG.md | grep -n "^## \[" | head -1 | cut -d: -f1)
             
             if [ -n "$NEXT_SECTION" ]; then
-              INSERT_LINE=$((UNRELEASED_LINE + NEXT_SECTION - 1))
+              INSERT_LINE=$((UNRELEASED_LINE + NEXT_SECTION))
             else
               # No next section, append at end
               INSERT_LINE=$(wc -l < CHANGELOG.md)
@@ -137,9 +137,17 @@ jobs:
           fi
           
           # Reconstruct the file
-          head -n "$INSERT_LINE" CHANGELOG.md > /tmp/changelog_new.md
-          cat /tmp/new_entry.txt >> /tmp/changelog_new.md
-          tail -n +"$((INSERT_LINE + 1))" CHANGELOG.md >> /tmp/changelog_new.md
+          TOTAL_LINES=$(wc -l < CHANGELOG.md)
+          if [ "$INSERT_LINE" -lt "$TOTAL_LINES" ]; then
+            # Insert within the file: take content up to INSERT_LINE, then new entry, then the rest
+            head -n "$INSERT_LINE" CHANGELOG.md > /tmp/changelog_new.md
+            cat /tmp/new_entry.txt >> /tmp/changelog_new.md
+            tail -n +"$((INSERT_LINE + 1))" CHANGELOG.md >> /tmp/changelog_new.md
+          else
+            # INSERT_LINE is at or beyond the end: append new entry after existing content
+            cat CHANGELOG.md > /tmp/changelog_new.md
+            cat /tmp/new_entry.txt >> /tmp/changelog_new.md
+          fi
           mv /tmp/changelog_new.md CHANGELOG.md
           
           echo "✅ Changelog updated for version $VERSION"
