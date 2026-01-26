@@ -40,17 +40,27 @@ The extension comes with precompiled binaries for Linux, macOS, and Windows, so 
 Download the latest precompiled binary for your platform from the [Releases page](https://github.com/renan-alm/gh-secrets-migrator/releases):
 
 ```bash
-# Linux/macOS
-curl -L https://github.com/renan-alm/gh-secrets-migrator/releases/latest/download/gh-secrets-migrator_<version>_<os>-<arch> -o gh-secrets-migrator
+# Linux AMD64
+curl -L https://github.com/renan-alm/gh-secrets-migrator/releases/latest/download/gh-secrets-migrator_v<version>_linux-amd64 -o gh-secrets-migrator
+chmod +x gh-secrets-migrator
+./gh-secrets-migrator --help
+
+# macOS AMD64 (Intel)
+curl -L https://github.com/renan-alm/gh-secrets-migrator/releases/latest/download/gh-secrets-migrator_v<version>_darwin-amd64 -o gh-secrets-migrator
+chmod +x gh-secrets-migrator
+./gh-secrets-migrator --help
+
+# macOS ARM64 (Apple Silicon)
+curl -L https://github.com/renan-alm/gh-secrets-migrator/releases/latest/download/gh-secrets-migrator_v<version>_darwin-arm64 -o gh-secrets-migrator
 chmod +x gh-secrets-migrator
 ./gh-secrets-migrator --help
 
 # Windows (PowerShell)
-Invoke-WebRequest -Uri "https://github.com/renan-alm/gh-secrets-migrator/releases/latest/download/gh-secrets-migrator_<version>_windows-amd64.exe" -OutFile "gh-secrets-migrator.exe"
+Invoke-WebRequest -Uri "https://github.com/renan-alm/gh-secrets-migrator/releases/latest/download/gh-secrets-migrator_v<version>_windows-amd64.exe" -OutFile "gh-secrets-migrator.exe"
 .\gh-secrets-migrator.exe --help
 ```
 
-Replace `<version>`, `<os>`, and `<arch>` with the appropriate values (e.g., `v1.0.0`, `linux`, `amd64`).
+**Note:** Replace `<version>` with the actual version number (e.g., `1.0.0`). The filenames include the `v` prefix.
 
 ### Option 3: From Source (Python)
 
