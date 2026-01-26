@@ -44,17 +44,74 @@ jobs:
           echo "📝 Generating changelog for $PREV_TAG..$CURRENT_TAG"
           
           # Generate commit list to a temp file
-          git log --format="- %s (%h)" --no-merges "$PREV_TAG".."$CURRENT_TAG" > /tmp/commits.txt
+          git log --format="%s (%h)" --no-merges "$PREV_TAG".."$CURRENT_TAG" | head -100 > /tmp/commits_raw.txt
           
-          if [ ! -s /tmp/commits.txt ]; then
+          if [ ! -s /tmp/commits_raw.txt ]; then
             echo "⚠️ No commits found between $PREV_TAG and $CURRENT_TAG"
-            echo "- Release $VERSION" > /tmp/commits.txt
+            echo "Release $VERSION" > /tmp/commits_raw.txt
           fi
+          
+          # Categorize commits by type
+          > /tmp/added.txt
+          > /tmp/changed.txt
+          > /tmp/fixed.txt
+          > /tmp/other.txt
+          
+          while IFS= read -r line; do
+            # Extract message without the prefix for cleaner output
+            clean_msg=$(echo "$line" | sed -E 's/^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([^)]*\))?!?:\s*//')
+            
+            if echo "$line" | grep -qE '^feat(\([^)]*\))?!?:'; then
+              echo "- $clean_msg" >> /tmp/added.txt
+            elif echo "$line" | grep -qE '^fix(\([^)]*\))?!?:'; then
+              echo "- $clean_msg" >> /tmp/fixed.txt
+            elif echo "$line" | grep -qE '^(refactor|perf|build|ci|style)(\([^)]*\))?!?:'; then
+              echo "- $clean_msg" >> /tmp/changed.txt
+            elif echo "$line" | grep -qE '^(docs|test|chore)(\([^)]*\))?!?:'; then
+              # Skip docs, test, chore commits from changelog
+              continue
+            else
+              echo "- $line" >> /tmp/other.txt
+            fi
+          done < /tmp/commits_raw.txt
           
           # Create the new changelog entry file
           echo "## [$VERSION] - $DATE" > /tmp/new_entry.txt
-          echo "" >> /tmp/new_entry.txt
-          cat /tmp/commits.txt >> /tmp/new_entry.txt
+          
+          if [ -s /tmp/added.txt ]; then
+            echo "" >> /tmp/new_entry.txt
+            echo "### Added" >> /tmp/new_entry.txt
+            echo "" >> /tmp/new_entry.txt
+            cat /tmp/added.txt >> /tmp/new_entry.txt
+          fi
+          
+          if [ -s /tmp/changed.txt ]; then
+            echo "" >> /tmp/new_entry.txt
+            echo "### Changed" >> /tmp/new_entry.txt
+            echo "" >> /tmp/new_entry.txt
+            cat /tmp/changed.txt >> /tmp/new_entry.txt
+          fi
+          
+          if [ -s /tmp/fixed.txt ]; then
+            echo "" >> /tmp/new_entry.txt
+            echo "### Fixed" >> /tmp/new_entry.txt
+            echo "" >> /tmp/new_entry.txt
+            cat /tmp/fixed.txt >> /tmp/new_entry.txt
+          fi
+          
+          if [ -s /tmp/other.txt ]; then
+            echo "" >> /tmp/new_entry.txt
+            echo "### Other" >> /tmp/new_entry.txt
+            echo "" >> /tmp/new_entry.txt
+            cat /tmp/other.txt >> /tmp/new_entry.txt
+          fi
+          
+          # If no categorized commits, add a generic entry
+          if [ ! -s /tmp/added.txt ] && [ ! -s /tmp/changed.txt ] && [ ! -s /tmp/fixed.txt ] && [ ! -s /tmp/other.txt ]; then
+            echo "" >> /tmp/new_entry.txt
+            echo "- Release $VERSION" >> /tmp/new_entry.txt
+          fi
+          
           echo "" >> /tmp/new_entry.txt
           
           # Find insertion point (after [Unreleased] section or after header)

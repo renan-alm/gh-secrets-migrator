@@ -2,32 +2,8 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [Unreleased]
-
-### Added
-
-- GitHub CLI extension support with precompiled binaries
-- Automated cross-platform binary compilation using PyInstaller
-- Build script for gh-extension-precompile action
-- Support for installation via `gh extension install`
-- Wrapper script for platform detection and binary delegation
-- Comprehensive installation documentation for extension, binary, and source
-
-### Improved
-
-- Enhanced Makefile to properly copy binaries to bin/ directory
-- Updated release workflow to use gh-extension-precompile for automated releases
-- Improved documentation with multiple installation methods
-- Added development and release process documentation
-- Updated QUICK_REFERENCE.md with extension information
-
-### Changed
-
-- Simplified release process using GitHub's official extension tools
-- Binaries now distributed as GitHub release assets
+This changelog is auto-generated from [Conventional Commits](https://www.conventionalcommits.org/).
+This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.3.0] - 2026-01-21
 
