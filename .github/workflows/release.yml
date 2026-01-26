@@ -69,8 +69,13 @@ jobs:
               INSERT_LINE=$(wc -l < CHANGELOG.md)
             fi
           else
-            # Insert after header (line 7)
-            INSERT_LINE=7
+            # No [Unreleased] section; insert at the first section heading, or end of file if none
+            FIRST_SECTION_LINE=$(grep -n "^## " CHANGELOG.md | head -1 | cut -d: -f1 || true)
+            if [ -n "$FIRST_SECTION_LINE" ]; then
+              INSERT_LINE=$FIRST_SECTION_LINE
+            else
+              INSERT_LINE=$(wc -l < CHANGELOG.md)
+            fi
           fi
           
           # Reconstruct the file
