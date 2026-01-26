@@ -1,11 +1,11 @@
-# GitHub Secrets Migrator (Python)
+# GitHub Secrets Migrator
 
 [![Tests](https://github.com/renan-alm/gh-secrets-migrator/actions/workflows/test-and-lint.yml/badge.svg)](https://github.com/renan-alm/gh-secrets-migrator/actions/workflows/test-and-lint.yml)
 [![Release](https://github.com/renan-alm/gh-secrets-migrator/actions/workflows/release.yml/badge.svg)](https://github.com/renan-alm/gh-secrets-migrator/actions/workflows/release.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-A tool to migrate GitHub repository secrets from a source repository to a target repository using GitHub Actions workflows.
+A GitHub CLI extension to migrate GitHub repository secrets from a source repository to a target repository using GitHub Actions workflows. Written in Python and compiled to native binaries using PyInstaller.
 
 ## Features
 
@@ -17,26 +17,66 @@ A tool to migrate GitHub repository secrets from a source repository to a target
 - 📝 Comprehensive logging with verbose mode
 - ✅ Validates PAT permissions before starting migration
 - 🧹 Automatic cleanup of temporary secrets
+- 🚀 Available as a GitHub CLI extension with precompiled binaries
 
 ## Installation
 
-### Prerequisites
+### Option 1: GitHub CLI Extension (Recommended)
+
+Install as a GitHub CLI extension for the easiest setup:
+
+```bash
+# Install from GitHub
+gh extension install renan-alm/gh-secrets-migrator
+
+# Use the extension
+gh secrets-migrator --source-org myorg --source-repo myrepo --target-org targetorg --target-repo targetrepo
+```
+
+The extension comes with precompiled binaries for Linux, macOS, and Windows, so no Python installation is required.
+
+### Option 2: Direct Binary Download
+
+Download the latest precompiled binary for your platform from the [Releases page](https://github.com/renan-alm/gh-secrets-migrator/releases):
+
+```bash
+# Linux/macOS
+curl -L https://github.com/renan-alm/gh-secrets-migrator/releases/latest/download/gh-secrets-migrator_<version>_<os>-<arch> -o gh-secrets-migrator
+chmod +x gh-secrets-migrator
+./gh-secrets-migrator --help
+
+# Windows (PowerShell)
+Invoke-WebRequest -Uri "https://github.com/renan-alm/gh-secrets-migrator/releases/latest/download/gh-secrets-migrator_<version>_windows-amd64.exe" -OutFile "gh-secrets-migrator.exe"
+.\gh-secrets-migrator.exe --help
+```
+
+Replace `<version>`, `<os>`, and `<arch>` with the appropriate values (e.g., `v1.0.0`, `linux`, `amd64`).
+
+### Option 3: From Source (Python)
+
+If you prefer to run from source or need to make modifications:
+
+#### Prerequisites
 
 - Python 3.10+
 - GitHub Personal Access Tokens (PAT) with appropriate scopes (see [Permissions](#permissions) section)
 
-### Setup
+#### Setup
 
 ```bash
 # Clone the repository
-git clone <repo-url>
+git clone https://github.com/renan-alm/gh-secrets-migrator.git
 cd gh-secrets-migrator
 
 # Install dependencies
 pip install -r requirements.txt
 
-# Or with dev dependencies
-make dev
+# Run from source
+python main.py --help
+
+# Or build a local binary
+make build
+./bin/gh-secrets-migrator --help
 ```
 
 ### Docker Setup (Lightweight)
@@ -193,9 +233,35 @@ For creating secrets in target repository:
 
 ## Usage
 
+You can use this tool in three ways:
+1. **As a GitHub CLI extension** (recommended): `gh secrets-migrator [OPTIONS]`
+2. **As a standalone binary**: `./gh-secrets-migrator [OPTIONS]`
+3. **From Python source**: `python main.py [OPTIONS]`
+
+All examples below work with any of these methods - just replace the command accordingly.
+
 ### Basic Usage with Explicit PATs
 
 ```bash
+# As GitHub CLI extension
+gh secrets-migrator \
+  --source-org <source-org> \
+  --source-repo <source-repo> \
+  --target-org <target-org> \
+  --target-repo <target-repo> \
+  --source-pat <source-pat> \
+  --target-pat <target-pat>
+
+# As standalone binary
+./gh-secrets-migrator \
+  --source-org <source-org> \
+  --source-repo <source-repo> \
+  --target-org <target-org> \
+  --target-repo <target-repo> \
+  --source-pat <source-pat> \
+  --target-pat <target-pat>
+
+# From source
 python main.py \
   --source-org <source-org> \
   --source-repo <source-repo> \
@@ -211,7 +277,9 @@ If you have a single token with permissions for both source and target:
 
 ```bash
 export GITHUB_TOKEN=<your-token>
-python main.py \
+
+# Any of these will work
+gh secrets-migrator \
   --source-org <source-org> \
   --source-repo <source-repo> \
   --target-org <target-org> \
@@ -223,7 +291,7 @@ python main.py \
 To migrate only organization-level secrets (ignoring repository and environment secrets):
 
 ```bash
-python main.py \
+gh secrets-migrator \
   --source-org <source-org> \
   --source-repo <source-repo> \
   --target-org <target-org> \
@@ -241,7 +309,7 @@ python main.py \
 **Example:**
 
 ```bash
-python main.py \
+gh secrets-migrator \
   --source-org myorg \
   --source-repo .github \
   --target-org targetorg \
@@ -252,7 +320,7 @@ python main.py \
 **With explicit target repository:**
 
 ```bash
-python main.py \
+gh secrets-migrator \
   --source-org myorg \
   --source-repo .github \
   --target-org targetorg \
@@ -264,7 +332,7 @@ python main.py \
 ### With Verbose Logging
 
 ```bash
-python main.py \
+gh secrets-migrator \
   --source-org myorg \
   --source-repo source-repo \
   --target-org targetorg \
@@ -279,7 +347,7 @@ python main.py \
 By default, environments from the source repository are recreated in the target repository. To skip this:
 
 ```bash
-python main.py \
+gh secrets-migrator \
   --source-org <source-org> \
   --source-repo <source-repo> \
   --target-org <target-org> \
@@ -292,7 +360,7 @@ python main.py \
 ### Example
 
 ```bash
-./main.py \
+gh secrets-migrator \
   --source-org renan-org \
   --source-repo .github \
   --target-org demo-org-renan \
