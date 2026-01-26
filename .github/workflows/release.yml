@@ -35,6 +35,7 @@ jobs:
 
       - name: Generate and update CHANGELOG
         run: |
+          set -e
           VERSION=${{ steps.version.outputs.version }}
           PREV_TAG=${{ steps.prev_tag.outputs.prev_tag }}
           CURRENT_TAG="v$VERSION"
