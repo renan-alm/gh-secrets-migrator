@@ -1,5 +1,20 @@
 # Quick Reference: Development & Testing
 
+## Installation Methods
+
+```bash
+# As GitHub CLI extension (recommended)
+gh extension install renan-alm/gh-secrets-migrator
+
+# From source
+git clone https://github.com/renan-alm/gh-secrets-migrator.git
+cd gh-secrets-migrator
+make dev
+
+# Build local binary
+make build
+```
+
 ## Run Commands
 
 ### Development Setup
@@ -7,6 +22,7 @@
 ```bash
 make install           # Install dependencies
 make dev              # Install with dev dependencies (includes linters/testing)
+make build            # Build binary for current platform
 ```
 
 ### Code Quality
@@ -43,6 +59,12 @@ src/
 └── utils/
     └── logger.py      # Logging utility
 
+script/
+└── build.sh          # Build script for gh-extension-precompile
+
+gh-secrets-migrator   # Wrapper script for GH CLI extension
+gh-secrets-migrator.spec  # PyInstaller specification
+manifest.json         # GH CLI extension manifest
 main.py               # Entry point
 requirements.txt      # Dependencies
 Makefile             # Development commands
@@ -58,6 +80,8 @@ Makefile             # Development commands
 - ✅ Automatic cleanup of temporary secrets
 - ✅ PAT permission validation
 - ✅ Comprehensive logging with verbose mode
+- ✅ Available as GitHub CLI extension
+- ✅ Precompiled binaries for Linux, macOS, Windows
 
 ## Before Committing
 
@@ -68,7 +92,7 @@ make format
 # Check linting
 make lint
 
-# Run tests (if configured)
+# Run tests
 make test
 
 # Clean up artifacts
@@ -77,10 +101,15 @@ make clean
 
 ## CLI Usage
 
+All examples work with any of these commands:
+- `gh secrets-migrator` (as extension)
+- `./gh-secrets-migrator` (local binary)
+- `python main.py` (from source)
+
 ### Repository-to-Repository Migration
 
 ```bash
-python main.py \
+gh secrets-migrator \
   --source-org <org> \
   --source-repo <repo> \
   --target-org <org> \
@@ -94,7 +123,7 @@ python main.py \
 ### Organization-to-Organization Migration
 
 ```bash
-python main.py \
+gh secrets-migrator \
   --source-org <org> \
   --target-org <org> \
   --source-repo <repo> \
@@ -124,6 +153,16 @@ python main.py \
 6. **Workflow runs** - migrates each secret to target environment
 7. **Cleanup** - deletes temporary secrets and branch
 
+## Release Process
+
+1. Update CHANGELOG.md with version entry
+2. Create and push tag: `git tag v1.0.0 && git push origin v1.0.0`
+3. GitHub Actions automatically:
+   - Validates changelog and tests
+   - Builds binaries for all platforms (Linux, macOS, Windows)
+   - Creates GitHub release
+   - Makes extension installable via `gh extension install`
+
 ## Troubleshooting
 
 | Issue | Solution |
@@ -132,6 +171,7 @@ python main.py \
 | Linting errors | `make lint` to check; `make format` to fix |
 | Workflow fails | Check GitHub Actions tab in source repo |
 | Permission denied | Verify PAT scopes (repo + workflow required) |
+| Binary not found | Run `make build` to build for your platform |
 
 ## Dependencies
 
@@ -139,7 +179,8 @@ See `requirements.txt`:
 
 - PyGithub - GitHub API client
 - Click - CLI framework
-- requests - HTTP library
+- python-dotenv - Environment variable loading
+- PyInstaller - Binary compilation
 
 ## Success Indicators
 
@@ -147,4 +188,5 @@ See `requirements.txt`:
 - ✅ No linting errors
 - ✅ All commands execute without errors
 - ✅ Workflow file generated successfully
-- ✅ Tests pass (when configured)
+- ✅ Tests pass
+- ✅ Binary builds successfully
