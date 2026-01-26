@@ -43,7 +43,7 @@ jobs:
           echo "📝 Generating changelog for $PREV_TAG..$CURRENT_TAG"
           
           # Generate commit list to a temp file
-          git log --format="- %s (%h)" --no-merges "$PREV_TAG".."$CURRENT_TAG" | head -50 > /tmp/commits.txt
+          git log --format="- %s (%h)" --no-merges "$PREV_TAG".."$CURRENT_TAG" > /tmp/commits.txt
           
           if [ ! -s /tmp/commits.txt ]; then
             echo "⚠️ No commits found between $PREV_TAG and $CURRENT_TAG"
