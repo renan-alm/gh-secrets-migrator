@@ -36,18 +36,26 @@ run:
 
 build:
 	python -m PyInstaller gh-secrets-migrator.spec --clean
+	@mkdir -p bin
+	@cp -r dist/bin/* bin/
 	@echo "✅ Build complete! Executable in bin/"
 
 build-mac:
 	python -m PyInstaller gh-secrets-migrator.spec --clean
+	@mkdir -p bin
+	@cp -r dist/bin/* bin/
 	@echo "✅ macOS build complete (Intel + Apple Silicon)! Output: bin/"
 
 build-linux:
 	python -m PyInstaller gh-secrets-migrator.spec --clean
+	@mkdir -p bin
+	@cp -r dist/bin/* bin/
 	@echo "✅ Linux build complete! Executable in bin/"
 
 build-windows:
 	python -m PyInstaller gh-secrets-migrator.spec --clean
+	@mkdir -p bin
+	@cp -r dist/bin/* bin/
 	@echo "✅ Windows build complete! Executable in bin/"
 
 build-onefile:
@@ -64,6 +72,6 @@ clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name '*.pyc' -delete
-	rm -rf build/ *.egg-info
+	rm -rf build/ dist/ bin/ *.egg-info
 
 .PHONY: help install dev lint format test run clean build build-mac build-linux build-windows build-onefile

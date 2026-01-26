@@ -526,11 +526,43 @@ Environment-specific secrets are now migrated! The tool generates one workflow s
 
 ## Development
 
+### Setting Up Development Environment
+
 ```bash
+# Clone the repository
+git clone https://github.com/renan-alm/gh-secrets-migrator.git
+cd gh-secrets-migrator
+
 # Set up development environment
 make dev
 
-# Run with verbose logging
+# Run tests
+make test
+
+# Run linting
+make lint
+
+# Format code
+make format
+```
+
+### Building Binaries
+
+```bash
+# Build for current platform
+make build
+
+# The binary will be in bin/gh-secrets-migrator
+./gh-secrets-migrator --help
+
+# Clean build artifacts
+make clean
+```
+
+### Testing Changes
+
+```bash
+# Run with verbose logging from source
 python main.py \
   --source-org myorg \
   --source-repo repo \
@@ -538,14 +570,40 @@ python main.py \
   --target-repo target \
   --verbose
 
-# Format code
-make format
+# Or test the built binary
+make build
+./gh-secrets-migrator --verbose --help
+```
 
-# Run linting
-make lint
+### Release Process
 
-# Clean up
-make clean
+The project uses GitHub Actions to automatically build and release binaries for multiple platforms:
+
+1. Update `CHANGELOG.md` with the new version entry
+2. Ensure all tests pass: `make test`
+3. Create and push a version tag:
+   ```bash
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+4. GitHub Actions will automatically:
+   - Validate the changelog entry exists
+   - Verify tests passed on master
+   - Build binaries for Linux, macOS, and Windows
+   - Create a GitHub release with binaries
+   - Make the extension installable via `gh extension install`
+
+### Available Make Targets
+
+```bash
+make help         # Show all available commands
+make install      # Install dependencies
+make dev          # Install with dev dependencies
+make lint         # Run linting checks
+make format       # Format code with black
+make test         # Run tests with pytest
+make build        # Build for current platform
+make clean        # Clean build artifacts
 ```
 
 ## API Reference
@@ -553,7 +611,9 @@ make clean
 ### CLI Command
 
 ```bash
-python main.py [OPTIONS]
+gh secrets-migrator [OPTIONS]
+# or: ./gh-secrets-migrator [OPTIONS]
+# or: python main.py [OPTIONS]
 
 Options:
   --source-org TEXT       Source organization name [required]
@@ -563,6 +623,8 @@ Options:
   --source-pat TEXT       Source Personal Access Token (defaults to GITHUB_TOKEN)
   --target-pat TEXT       Target Personal Access Token (defaults to GITHUB_TOKEN)
   --verbose              Enable verbose logging
+  --skip-envs            Skip environment recreation
+  --org-to-org           Migrate only organization-level secrets
   --help                 Show help message
 ```
 
