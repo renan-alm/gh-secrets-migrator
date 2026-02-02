@@ -1,0 +1,30 @@
+[project]
+name = "gh-secrets-migrator"
+version = "1.0.0"
+description = "A tool to migrate GitHub secrets between repositories and organizations"
+requires-python = ">=3.10"
+readme = "README.md"
+license = {text = "MIT"}
+
+[project.scripts]
+gh-secrets-migrator = "main:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_functions = "test_*"
+addopts = "-v --tb=short"
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+strict = false
+
+[tool.flake8]
+max-line-length = 100
+ignore = ["E203", "W503"]
+exclude = [".git", "__pycache__", "venv", "build", "dist"]
+
+[tool.bandit]
+exclude_dirs = ["tests", "venv"]
+skips = []
