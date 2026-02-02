@@ -1,6 +1,6 @@
 """Tests for Migrator rate limit handling and resilience."""
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from datetime import datetime, timezone
 
 from src.core.migrator import Migrator
