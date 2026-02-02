@@ -38,7 +38,7 @@ class TestOrgSecretFiltering:
         # Fix: Mock get_repo directly on the client instance, skipping get_user
         mock_github_instance = Mock()
         mock_github_instance.get_repo.return_value = mock_repo
-        mock_github_instance.get_rate_limit.return_value = Mock(core=Mock(remaining=5000, limit=5000, reset=1234567890))
+        mock_github_instance.get_rate_limit.return_value = Mock(resources=Mock(core=Mock(remaining=5000, limit=5000, reset=1234567890)))
         mock_github_class.return_value = mock_github_instance
         
         # Create client (will use mocked Github)
@@ -67,7 +67,7 @@ class TestOrgSecretFiltering:
         
         mock_github_instance = Mock()
         mock_github_instance.get_repo.return_value = mock_repo
-        mock_github_instance.get_rate_limit.return_value = Mock(core=Mock(remaining=5000, limit=5000, reset=1234567890))
+        mock_github_instance.get_rate_limit.return_value = Mock(resources=Mock(core=Mock(remaining=5000, limit=5000, reset=1234567890)))
         mock_github_class.return_value = mock_github_instance
         
         client = GitHubClient("fake-token", logger)
@@ -92,7 +92,7 @@ class TestOrgSecretFiltering:
         
         mock_github_instance = Mock()
         mock_github_instance.get_repo.return_value = mock_repo
-        mock_github_instance.get_rate_limit.return_value = Mock(core=Mock(remaining=5000, limit=5000, reset=1234567890))
+        mock_github_instance.get_rate_limit.return_value = Mock(resources=Mock(core=Mock(remaining=5000, limit=5000, reset=1234567890)))
         mock_github_class.return_value = mock_github_instance
         
         client = GitHubClient("fake-token", logger)
@@ -112,7 +112,7 @@ class TestOrgSecretFiltering:
         
         mock_github_instance = Mock()
         mock_github_instance.get_repo.return_value = mock_repo
-        mock_github_instance.get_rate_limit.return_value = Mock(core=Mock(remaining=5000, limit=5000, reset=1234567890))
+        mock_github_instance.get_rate_limit.return_value = Mock(resources=Mock(core=Mock(remaining=5000, limit=5000, reset=1234567890)))
         mock_github_class.return_value = mock_github_instance
         
         client = GitHubClient("fake-token", logger)
@@ -230,7 +230,7 @@ class TestRepoSecretEdgeCases:
         
         mock_github_instance = Mock()
         mock_github_instance.get_repo.return_value = mock_repo
-        mock_github_instance.get_rate_limit.return_value = Mock(core=Mock(remaining=5000, limit=5000, reset=1234567890))
+        mock_github_instance.get_rate_limit.return_value = Mock(resources=Mock(core=Mock(remaining=5000, limit=5000, reset=1234567890)))
         mock_github_class.return_value = mock_github_instance
         
         client = GitHubClient("fake-token", logger)
@@ -255,7 +255,7 @@ class TestRepoSecretEdgeCases:
         
         mock_github_instance = Mock()
         mock_github_instance.get_repo.return_value = mock_repo
-        mock_github_instance.get_rate_limit.return_value = Mock(core=Mock(remaining=5000, limit=5000, reset=1234567890))
+        mock_github_instance.get_rate_limit.return_value = Mock(resources=Mock(core=Mock(remaining=5000, limit=5000, reset=1234567890)))
         mock_github_class.return_value = mock_github_instance
         
         client = GitHubClient("fake-token", logger)

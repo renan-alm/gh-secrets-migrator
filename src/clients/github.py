@@ -28,7 +28,9 @@ class GitHubClient:
             import time
             from datetime import datetime
             rate_limit = self.client.get_rate_limit()
-            reset_dt = rate_limit.core.reset
+            # PyGithub 2.7.0+ returns RateLimitOverview, access via resources.core
+            core = rate_limit.resources.core
+            reset_dt = core.reset
             # Convert datetime to timestamp if needed
             if isinstance(reset_dt, datetime):
                 reset_timestamp = reset_dt.timestamp()
@@ -36,8 +38,8 @@ class GitHubClient:
                 reset_timestamp = reset_dt
             reset_in = max(0, reset_timestamp - time.time())
             return {
-                'remaining': rate_limit.core.remaining,
-                'limit': rate_limit.core.limit,
+                'remaining': core.remaining,
+                'limit': core.limit,
                 'reset_time': reset_timestamp,
                 'reset_in_seconds': int(reset_in)
             }
