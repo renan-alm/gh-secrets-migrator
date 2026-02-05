@@ -1,6 +1,6 @@
 """GitHub API client wrapper."""
 # flake8: noqa: E501
-from typing import List
+from typing import List, Dict, Optional
 from github import Github, UnknownObjectException
 from src.utils.logger import Logger
 
@@ -322,3 +322,124 @@ class GitHubClient:
         except Exception as e:
             self.log.error(f"Failed to delete organization secret {secret_name}: {type(e).__name__}: {e}")
             raise RuntimeError(f"Failed to delete organization secret {secret_name}: {e}")
+
+    def get_org_secret_scope(self, org: str, secret_name: str) -> Dict[str, any]:
+        """Get the visibility and selected repositories for an organization secret.
+        
+        Args:
+            org: Organization name
+            secret_name: Name of the secret
+            
+        Returns:
+            Dictionary with:
+            - visibility: "all", "private", or "selected"
+            - selected_repositories: List of repository names (only if visibility is "selected")
+        """
+        try:
+            organization = self.client.get_organization(org)
+            secret = organization.get_secret(secret_name)
+            
+            result = {
+                'visibility': secret.visibility,
+                'selected_repositories': []
+            }
+            
+            # Only fetch selected repositories if visibility is "selected"
+            if secret.visibility == "selected":
+                try:
+                    repos = secret.selected_repositories
+                    result['selected_repositories'] = [repo.name for repo in repos]
+                    self.log.debug(f"Secret {secret_name} has {len(result['selected_repositories'])} selected repositories")
+                except Exception as e:
+                    self.log.debug(f"Failed to fetch selected repositories for {secret_name}: {e}")
+            
+            self._log_rate_limit(f"get_org_secret_scope({org}/{secret_name})")
+            return result
+        except Exception as e:
+            self.log.error(f"Failed to get scope for organization secret {secret_name}: {type(e).__name__}: {e}")
+            raise RuntimeError(f"Failed to get scope for organization secret {secret_name}: {e}")
+
+    def get_org_secrets_with_scope(self, org: str) -> Dict[str, Dict[str, any]]:
+        """Get all organization secrets with their scope information.
+        
+        Args:
+            org: Organization name
+            
+        Returns:
+            Dictionary mapping secret names to their scope information:
+            {
+                'SECRET_NAME': {
+                    'visibility': 'selected',
+                    'selected_repositories': ['repo1', 'repo2']
+                },
+                ...
+            }
+        """
+        try:
+            organization = self.client.get_organization(org)
+            secrets = organization.get_secrets()
+            
+            secrets_info = {}
+            for secret in secrets:
+                scope_info = {
+                    'visibility': secret.visibility,
+                    'selected_repositories': []
+                }
+                
+                # Only fetch selected repositories if visibility is "selected"
+                if secret.visibility == "selected":
+                    try:
+                        repos = secret.selected_repositories
+                        scope_info['selected_repositories'] = [repo.name for repo in repos]
+                    except Exception as e:
+                        self.log.debug(f"Failed to fetch selected repositories for {secret.name}: {e}")
+                
+                secrets_info[secret.name] = scope_info
+            
+            self._log_rate_limit(f"get_org_secrets_with_scope({org})")
+            self.log.debug(f"Retrieved scope information for {len(secrets_info)} organization secrets in {org}")
+            return secrets_info
+        except Exception as e:
+            self.log.error(f"Failed to get organization secrets with scope: {type(e).__name__}: {e}")
+            raise RuntimeError(f"Failed to get organization secrets with scope: {e}")
+
+    def check_repo_exists(self, org: str, repo_name: str) -> bool:
+        """Check if a repository exists in the organization.
+        
+        Args:
+            org: Organization name
+            repo_name: Repository name to check
+            
+        Returns:
+            True if repository exists, False otherwise
+        """
+        try:
+            organization = self.client.get_organization(org)
+            organization.get_repo(repo_name)
+            return True
+        except UnknownObjectException:
+            return False
+        except Exception as e:
+            self.log.debug(f"Error checking if repo {repo_name} exists in {org}: {e}")
+            return False
+
+    def get_matching_repos(self, org: str, repo_names: List[str]) -> List[str]:
+        """Get list of repositories that exist in the organization from a given list.
+        
+        Args:
+            org: Organization name
+            repo_names: List of repository names to check
+            
+        Returns:
+            List of repository names that exist in the organization
+        """
+        matching_repos = []
+        for repo_name in repo_names:
+            if self.check_repo_exists(org, repo_name):
+                matching_repos.append(repo_name)
+                self.log.debug(f"Repository {repo_name} exists in {org}")
+            else:
+                self.log.debug(f"Repository {repo_name} does not exist in {org}")
+        
+        self._log_rate_limit(f"get_matching_repos({org})")
+        return matching_repos
