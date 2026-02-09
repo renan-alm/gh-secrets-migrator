@@ -2,7 +2,7 @@
 from typing import Dict, List, Optional
 # flake8: noqa: E501
 
-def generate_environment_secret_steps(env_secrets: Dict[str, List[str]], source_org: str, source_repo: str, target_org: str, target_repo: str) -> str:
+def generate_environment_secret_steps(env_secrets: Dict[str, List[str]], source_org: str, source_repo: str, target_org: str, target_repo: str, target_endpoint: str = "https://api.github.com") -> str:
     """Generate workflow steps for each environment secret.
     
     Args:
@@ -12,22 +12,38 @@ def generate_environment_secret_steps(env_secrets: Dict[str, List[str]], source_
         source_repo: Source repository
         target_org: Target organization
         target_repo: Target repository
+        target_endpoint: Target GitHub API endpoint (default: https://api.github.com)
         
     Returns:
         String containing all the generated workflow steps
     """
     steps = []
     
+    # Extract hostname from API endpoint for GH_HOST
+    # e.g., https://api.github.com -> api.github.com
+    # or https://us.api.github.com -> us.api.github.com
+    gh_host = target_endpoint.replace("https://", "").replace("http://", "").rstrip("/")
+    gh_env_vars = f"GH_HOST: '{gh_host}'" if target_endpoint != "https://api.github.com" else ""
+    
     for env_name, secret_names in env_secrets.items():
         for secret_name in secret_names:
+            # Build env section with optional GH_HOST
+            env_lines = [
+                f"          TARGET_ORG: '{target_org}'",
+                f"          TARGET_REPO: '{target_repo}'",
+                f"          ENVIRONMENT: '{env_name}'",
+                f"          SECRET_NAME: '{secret_name}'",
+                f"          SECRET_VALUE: ${{{{ secrets.{secret_name} }}}}",
+                f"          GH_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_TARGET_PAT }}}}"
+            ]
+            if gh_env_vars:
+                env_lines.append(f"          {gh_env_vars}")
+            
+            env_section = "\n".join(env_lines)
+            
             step = f"""      - name: Migrate {env_name} - {secret_name}
         env:
-          TARGET_ORG: '{target_org}'
-          TARGET_REPO: '{target_repo}'
-          ENVIRONMENT: '{env_name}'
-          SECRET_NAME: '{secret_name}'
-          SECRET_VALUE: ${{{{ secrets.{secret_name} }}}}
-          GH_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_TARGET_PAT }}}}
+{env_section}
         run: |
           #!/bin/bash
           set -e
@@ -53,26 +69,40 @@ def generate_environment_secret_steps(env_secrets: Dict[str, List[str]], source_
     return "\n".join(steps)
 
 
-def generate_org_secret_steps(org_secrets: List[str], target_org: str) -> str:
+def generate_org_secret_steps(org_secrets: List[str], target_org: str, target_endpoint: str = "https://api.github.com") -> str:
     """Generate workflow steps for each organization secret.
     
     Args:
         org_secrets: List of organization secret names
                      Example: ['DB_PASSWORD', 'API_KEY', 'DEPLOY_TOKEN']
         target_org: Target organization
+        target_endpoint: Target GitHub API endpoint (default: https://api.github.com)
         
     Returns:
         String containing all the generated workflow steps
     """
     steps = []
     
+    # Extract hostname from API endpoint for GH_HOST
+    gh_host = target_endpoint.replace("https://", "").replace("http://", "").rstrip("/")
+    gh_env_vars = f"GH_HOST: '{gh_host}'" if target_endpoint != "https://api.github.com" else ""
+    
     for secret_name in org_secrets:
+        # Build env section with optional GH_HOST
+        env_lines = [
+            f"          TARGET_ORG: '{target_org}'",
+            f"          SECRET_NAME: '{secret_name}'",
+            f"          SECRET_VALUE: ${{{{ secrets.{secret_name} }}}}",
+            f"          GH_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_TARGET_PAT }}}}"
+        ]
+        if gh_env_vars:
+            env_lines.append(f"          {gh_env_vars}")
+        
+        env_section = "\n".join(env_lines)
+        
         step = f"""      - name: Migrate Org Secret - {secret_name}
         env:
-          TARGET_ORG: '{target_org}'
-          SECRET_NAME: '{secret_name}'
-          SECRET_VALUE: ${{{{ secrets.{secret_name} }}}}
-          GH_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_TARGET_PAT }}}}
+{env_section}
         run: |
           #!/bin/bash
           set -e
@@ -97,18 +127,23 @@ def generate_org_secret_steps(org_secrets: List[str], target_org: str) -> str:
     return "\n".join(steps)
 
 
-def generate_repo_secret_steps(repo_secrets: List[str], target_org: str, target_repo: str) -> str:
+def generate_repo_secret_steps(repo_secrets: List[str], target_org: str, target_repo: str, target_endpoint: str = "https://api.github.com") -> str:
     """Generate workflow steps for each repository secret.
     
     Args:
         repo_secrets: List of repository secret names
         target_org: Target organization
         target_repo: Target repository
+        target_endpoint: Target GitHub API endpoint (default: https://api.github.com)
         
     Returns:
         String containing all the generated workflow steps
     """
     steps = []
+    
+    # Extract hostname from API endpoint for GH_HOST
+    gh_host = target_endpoint.replace("https://", "").replace("http://", "").rstrip("/")
+    gh_env_vars = f"GH_HOST: '{gh_host}'" if target_endpoint != "https://api.github.com" else ""
     
     for secret_name in repo_secrets:
         # Skip system secrets
@@ -118,13 +153,22 @@ def generate_repo_secret_steps(repo_secrets: List[str], target_org: str, target_
         # Create a display name with spaces to prevent GitHub masking if the name matches a value
         display_name = " ".join(secret_name)
 
+        # Build env section with optional GH_HOST
+        env_lines = [
+            f"          TARGET_ORG: '{target_org}'",
+            f"          TARGET_REPO: '{target_repo}'",
+            f"          SECRET_NAME: '{secret_name}'",
+            f"          SECRET_VALUE: ${{{{ secrets.{secret_name} }}}}",
+            f"          GH_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_TARGET_PAT }}}}"
+        ]
+        if gh_env_vars:
+            env_lines.append(f"          {gh_env_vars}")
+        
+        env_section = "\n".join(env_lines)
+
         step = f"""      - name: Migrate Repo Secret - {secret_name}
         env:
-          TARGET_ORG: '{target_org}'
-          TARGET_REPO: '{target_repo}'
-          SECRET_NAME: '{secret_name}'
-          SECRET_VALUE: ${{{{ secrets.{secret_name} }}}}
-          GH_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_TARGET_PAT }}}}
+{env_section}
         run: |
           #!/bin/bash
           set -e
@@ -157,7 +201,9 @@ def generate_workflow(
     branch_name: str, 
     env_secrets: Optional[Dict[str, List[str]]] = None,
     org_secrets: Optional[List[str]] = None,
-    repo_secrets: Optional[List[str]] = None
+    repo_secrets: Optional[List[str]] = None,
+    source_endpoint: str = "https://api.github.com",
+    target_endpoint: str = "https://api.github.com"
 ) -> str:
     """Generate the GitHub Actions workflow for secret migration.
     
@@ -174,6 +220,8 @@ def generate_workflow(
         repo_secrets: Optional list of repository secret names for repo-to-repo migration
                      Example: ['DB_PASSWORD', 'API_KEY', 'DEPLOY_TOKEN']
                      If provided, only these secrets will be migrated (excludes org secrets)
+        source_endpoint: Source GitHub API endpoint (default: https://api.github.com)
+        target_endpoint: Target GitHub API endpoint (default: https://api.github.com)
     """
     # Generate migration steps based on type
     migration_steps = ""
@@ -181,15 +229,19 @@ def generate_workflow(
     # Repo-to-repo: include repository secrets step
     if not org_secrets:
         if repo_secrets is not None:
-            migration_steps = generate_repo_secret_steps(repo_secrets, target_org, target_repo)
+            migration_steps = generate_repo_secret_steps(repo_secrets, target_org, target_repo, target_endpoint)
         else:
+            # Extract hostname from API endpoint for GH_HOST
+            gh_host = target_endpoint.replace("https://", "").replace("http://", "").rstrip("/")
+            gh_env_vars = f"\n          GH_HOST: '{gh_host}'" if target_endpoint != "https://api.github.com" else ""
+            
             migration_steps = f"""      - name: Populate Repository Secrets
         id: migrate
         env:
           REPO_SECRETS: ${{{{ toJSON(secrets) }}}}
           TARGET_ORG: '{target_org}'
           TARGET_REPO: '{target_repo}'
-          GH_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_TARGET_PAT }}}}
+          GH_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_TARGET_PAT }}}}{gh_env_vars}
         run: |
           #!/bin/bash
           set -e
@@ -232,13 +284,17 @@ def generate_workflow(
     
     # Org-to-org Migration flow
     if org_secrets:
-        migration_steps += generate_org_secret_steps(org_secrets, target_org)
+        migration_steps += generate_org_secret_steps(org_secrets, target_org, target_endpoint)
         env_steps = ""
     else:
         # Environment secrets only for repo-to-repo migrations
         env_steps = ""
         if env_secrets:
-            env_steps = generate_environment_secret_steps(env_secrets, source_org, source_repo, target_org, target_repo)
+            env_steps = generate_environment_secret_steps(env_secrets, source_org, source_repo, target_org, target_repo, target_endpoint)
+    
+    # Extract hostname from API endpoint for GH_HOST (for cleanup step)
+    gh_host_source = source_endpoint.replace("https://", "").replace("http://", "").rstrip("/")
+    gh_env_vars_cleanup = f"\n          GH_HOST: '{gh_host_source}'" if source_endpoint != "https://api.github.com" else ""
     
     workflow = f"""name: move-secrets
 on:
@@ -258,7 +314,7 @@ jobs:
         if: always()
         env:
           GH_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_SOURCE_PAT }}}}
-          GITHUB_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_SOURCE_PAT }}}}
+          GITHUB_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_SOURCE_PAT }}}}{gh_env_vars_cleanup}
         run: |
           #!/bin/bash
           set -e

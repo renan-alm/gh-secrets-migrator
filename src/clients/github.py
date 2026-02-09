@@ -8,10 +8,11 @@ from src.utils.logger import Logger
 class GitHubClient:
     """Client for GitHub API operations."""
 
-    def __init__(self, pat: str, logger: Logger):
-        """Initialize GitHub client with PAT."""
-        self.client = Github(pat)
+    def __init__(self, pat: str, logger: Logger, base_url: str = "https://api.github.com"):
+        """Initialize GitHub client with PAT and optional custom endpoint."""
+        self.client = Github(pat, base_url=base_url)
         self.log = logger
+        self.base_url = base_url
     
     def get_rate_limit_info(self) -> dict:
         """Get current rate limit information.

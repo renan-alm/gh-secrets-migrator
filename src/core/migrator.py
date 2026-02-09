@@ -13,8 +13,8 @@ class Migrator:
     def __init__(self, config: MigrationConfig, logger: Logger):
         self.config = config
         self.log = logger
-        self.source_api = GitHubClient(config.source_pat, logger)
-        self.target_api = GitHubClient(config.target_pat, logger)
+        self.source_api = GitHubClient(config.source_pat, logger, config.source_endpoint)
+        self.target_api = GitHubClient(config.target_pat, logger, config.target_endpoint)
     
     def _check_rate_limits(self, checkpoint: str) -> bool:
         """Check rate limits and warn if low.
@@ -434,7 +434,9 @@ class Migrator:
                 self.config.target_org, target_repo,
                 branch_name,
                 env_secrets=None,
-                org_secrets=secrets_to_migrate
+                org_secrets=secrets_to_migrate,
+                source_endpoint=self.config.source_endpoint,
+                target_endpoint=self.config.target_endpoint
             )
             
             # Step 3: Create migration branch and push workflow
@@ -614,7 +616,9 @@ class Migrator:
             self.config.source_org, self.config.source_repo,
             self.config.target_org, self.config.target_repo, branch_name,
             env_secrets_info,
-            repo_secrets=secrets_to_migrate
+            repo_secrets=secrets_to_migrate,
+            source_endpoint=self.config.source_endpoint,
+            target_endpoint=self.config.target_endpoint
         )
         self.log.debug("Creating workflow file...")
         self.source_api.create_file(
