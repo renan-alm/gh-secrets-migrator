@@ -2,6 +2,9 @@
 from typing import Dict, List, Optional
 # flake8: noqa: E501
 
+# Default GitHub API endpoint
+DEFAULT_GITHUB_ENDPOINT = "https://api.github.com"
+
 
 def extract_gh_host(endpoint: str) -> str:
     """Extract hostname from API endpoint for GH_HOST environment variable.
@@ -23,7 +26,19 @@ def extract_gh_host(endpoint: str) -> str:
     return endpoint.replace("https://", "").replace("http://", "").rstrip("/")
 
 
-def generate_environment_secret_steps(env_secrets: Dict[str, List[str]], source_org: str, source_repo: str, target_org: str, target_repo: str, target_endpoint: str = "https://api.github.com") -> str:
+def should_set_gh_host(endpoint: str) -> bool:
+    """Check if GH_HOST should be set for the given endpoint.
+    
+    Args:
+        endpoint: GitHub API endpoint URL
+        
+    Returns:
+        True if GH_HOST should be set (non-default endpoint), False otherwise
+    """
+    return endpoint != DEFAULT_GITHUB_ENDPOINT
+
+
+def generate_environment_secret_steps(env_secrets: Dict[str, List[str]], source_org: str, source_repo: str, target_org: str, target_repo: str, target_endpoint: str = DEFAULT_GITHUB_ENDPOINT) -> str:
     """Generate workflow steps for each environment secret.
     
     Args:
@@ -42,7 +57,7 @@ def generate_environment_secret_steps(env_secrets: Dict[str, List[str]], source_
     
     # Extract hostname from API endpoint for GH_HOST
     gh_host = extract_gh_host(target_endpoint)
-    gh_env_vars = f"GH_HOST: '{gh_host}'" if target_endpoint != "https://api.github.com" else ""
+    gh_env_vars = f"GH_HOST: '{gh_host}'" if should_set_gh_host(target_endpoint) else ""
     
     for env_name, secret_names in env_secrets.items():
         for secret_name in secret_names:
@@ -88,7 +103,7 @@ def generate_environment_secret_steps(env_secrets: Dict[str, List[str]], source_
     return "\n".join(steps)
 
 
-def generate_org_secret_steps(org_secrets: List[str], target_org: str, target_endpoint: str = "https://api.github.com") -> str:
+def generate_org_secret_steps(org_secrets: List[str], target_org: str, target_endpoint: str = DEFAULT_GITHUB_ENDPOINT) -> str:
     """Generate workflow steps for each organization secret.
     
     Args:
@@ -104,7 +119,7 @@ def generate_org_secret_steps(org_secrets: List[str], target_org: str, target_en
     
     # Extract hostname from API endpoint for GH_HOST
     gh_host = extract_gh_host(target_endpoint)
-    gh_env_vars = f"GH_HOST: '{gh_host}'" if target_endpoint != "https://api.github.com" else ""
+    gh_env_vars = f"GH_HOST: '{gh_host}'" if should_set_gh_host(target_endpoint) else ""
     
     for secret_name in org_secrets:
         # Build env section with optional GH_HOST
@@ -146,7 +161,7 @@ def generate_org_secret_steps(org_secrets: List[str], target_org: str, target_en
     return "\n".join(steps)
 
 
-def generate_repo_secret_steps(repo_secrets: List[str], target_org: str, target_repo: str, target_endpoint: str = "https://api.github.com") -> str:
+def generate_repo_secret_steps(repo_secrets: List[str], target_org: str, target_repo: str, target_endpoint: str = DEFAULT_GITHUB_ENDPOINT) -> str:
     """Generate workflow steps for each repository secret.
     
     Args:
@@ -162,7 +177,7 @@ def generate_repo_secret_steps(repo_secrets: List[str], target_org: str, target_
     
     # Extract hostname from API endpoint for GH_HOST
     gh_host = extract_gh_host(target_endpoint)
-    gh_env_vars = f"GH_HOST: '{gh_host}'" if target_endpoint != "https://api.github.com" else ""
+    gh_env_vars = f"GH_HOST: '{gh_host}'" if should_set_gh_host(target_endpoint) else ""
     
     for secret_name in repo_secrets:
         # Skip system secrets
@@ -221,8 +236,8 @@ def generate_workflow(
     env_secrets: Optional[Dict[str, List[str]]] = None,
     org_secrets: Optional[List[str]] = None,
     repo_secrets: Optional[List[str]] = None,
-    source_endpoint: str = "https://api.github.com",
-    target_endpoint: str = "https://api.github.com"
+    source_endpoint: str = DEFAULT_GITHUB_ENDPOINT,
+    target_endpoint: str = DEFAULT_GITHUB_ENDPOINT
 ) -> str:
     """Generate the GitHub Actions workflow for secret migration.
     
@@ -252,7 +267,7 @@ def generate_workflow(
         else:
             # Extract hostname from API endpoint for GH_HOST
             gh_host = extract_gh_host(target_endpoint)
-            gh_env_vars = f"\n          GH_HOST: '{gh_host}'" if target_endpoint != "https://api.github.com" else ""
+            gh_env_vars = f"\n          GH_HOST: '{gh_host}'" if should_set_gh_host(target_endpoint) else ""
             
             migration_steps = f"""      - name: Populate Repository Secrets
         id: migrate
@@ -313,7 +328,7 @@ def generate_workflow(
     
     # Extract hostname from API endpoint for GH_HOST (for cleanup step)
     gh_host_source = extract_gh_host(source_endpoint)
-    gh_env_vars_cleanup = f"\n          GH_HOST: '{gh_host_source}'" if source_endpoint != "https://api.github.com" else ""
+    gh_env_vars_cleanup = f"\n          GH_HOST: '{gh_host_source}'" if should_set_gh_host(source_endpoint) else ""
     
     workflow = f"""name: move-secrets
 on:

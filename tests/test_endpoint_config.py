@@ -5,6 +5,8 @@ from src.core.config import MigrationConfig
 from src.clients.github import GitHubClient
 from src.core.workflow_generator import (
     extract_gh_host,
+    should_set_gh_host,
+    DEFAULT_GITHUB_ENDPOINT,
     generate_environment_secret_steps,
     generate_org_secret_steps,
     generate_repo_secret_steps,
@@ -39,6 +41,27 @@ class TestExtractGhHost:
     def test_extract_with_trailing_slash(self):
         """Test extracting hostname with trailing slash."""
         assert extract_gh_host("https://api.github.com/") == "api.github.com"
+
+
+class TestShouldSetGhHost:
+    """Test the should_set_gh_host helper function."""
+
+    def test_should_not_set_for_default(self):
+        """Test that GH_HOST should not be set for default endpoint."""
+        assert should_set_gh_host(DEFAULT_GITHUB_ENDPOINT) is False
+        assert should_set_gh_host("https://api.github.com") is False
+
+    def test_should_set_for_ghec_us(self):
+        """Test that GH_HOST should be set for GHEC US."""
+        assert should_set_gh_host("https://us.api.github.com") is True
+
+    def test_should_set_for_ghec_eu(self):
+        """Test that GH_HOST should be set for GHEC EU."""
+        assert should_set_gh_host("https://eu.api.github.com") is True
+
+    def test_should_set_for_ghes(self):
+        """Test that GH_HOST should be set for GHES."""
+        assert should_set_gh_host("https://github.example.com/api/v3") is True
 
 
 class TestEndpointConfiguration:
