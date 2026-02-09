@@ -4,12 +4,41 @@ import pytest
 from src.core.config import MigrationConfig
 from src.clients.github import GitHubClient
 from src.core.workflow_generator import (
+    extract_gh_host,
     generate_environment_secret_steps,
     generate_org_secret_steps,
     generate_repo_secret_steps,
     generate_workflow
 )
 from src.utils.logger import Logger
+
+
+class TestExtractGhHost:
+    """Test the extract_gh_host helper function."""
+
+    def test_extract_standard_github(self):
+        """Test extracting hostname from standard GitHub.com."""
+        assert extract_gh_host("https://api.github.com") == "api.github.com"
+
+    def test_extract_ghec_us(self):
+        """Test extracting hostname from GHEC US."""
+        assert extract_gh_host("https://us.api.github.com") == "us.api.github.com"
+
+    def test_extract_ghec_eu(self):
+        """Test extracting hostname from GHEC EU."""
+        assert extract_gh_host("https://eu.api.github.com") == "eu.api.github.com"
+
+    def test_extract_ghes(self):
+        """Test extracting hostname from GHES."""
+        assert extract_gh_host("https://github.example.com/api/v3") == "github.example.com/api/v3"
+
+    def test_extract_http(self):
+        """Test extracting hostname from HTTP endpoint."""
+        assert extract_gh_host("http://localhost:8080/api/v3") == "localhost:8080/api/v3"
+
+    def test_extract_with_trailing_slash(self):
+        """Test extracting hostname with trailing slash."""
+        assert extract_gh_host("https://api.github.com/") == "api.github.com"
 
 
 class TestEndpointConfiguration:
@@ -88,31 +117,31 @@ class TestGitHubClientWithEndpoints:
 
     def test_client_initialization_default_endpoint(self, mock_logger):
         """Test client initialization with default endpoint."""
-        with patch('src.clients.github.Github') as mock_github:
+        with patch('src.clients.github.Github') as mock_github_class:
             client = GitHubClient(pat="test-token", logger=mock_logger)
-            mock_github.assert_called_once_with("test-token", base_url="https://api.github.com")
+            mock_github_class.assert_called_once_with("test-token", base_url="https://api.github.com")
             assert client.base_url == "https://api.github.com"
 
     def test_client_initialization_custom_endpoint(self, mock_logger):
         """Test client initialization with custom endpoint."""
-        with patch('src.clients.github.Github') as mock_github:
+        with patch('src.clients.github.Github') as mock_github_class:
             client = GitHubClient(
                 pat="test-token",
                 logger=mock_logger,
                 base_url="https://us.api.github.com"
             )
-            mock_github.assert_called_once_with("test-token", base_url="https://us.api.github.com")
+            mock_github_class.assert_called_once_with("test-token", base_url="https://us.api.github.com")
             assert client.base_url == "https://us.api.github.com"
 
     def test_client_initialization_ghes_endpoint(self, mock_logger):
         """Test client initialization with GHES endpoint."""
-        with patch('src.clients.github.Github') as mock_github:
+        with patch('src.clients.github.Github') as mock_github_class:
             client = GitHubClient(
                 pat="test-token",
                 logger=mock_logger,
                 base_url="https://github.example.com/api/v3"
             )
-            mock_github.assert_called_once_with(
+            mock_github_class.assert_called_once_with(
                 "test-token",
                 base_url="https://github.example.com/api/v3"
             )
