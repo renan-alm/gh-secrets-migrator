@@ -14,6 +14,7 @@ A GitHub CLI extension to migrate GitHub repository secrets from a source reposi
 - 🔐 Automatically encrypts secrets using GitHub's public key
 - 🤖 Uses GitHub Actions workflow for automated migration
 - 🔄 Supports both explicit PATs or GITHUB_TOKEN environment variable
+- 🌐 Supports custom endpoints for GHEC Data Residency, GHES, and EMU
 - 📝 Comprehensive logging with verbose mode
 - ✅ Validates PAT permissions before starting migration
 - 🧹 Automatic cleanup of temporary secrets
@@ -431,10 +432,96 @@ make help         # Show all available commands
 - `--verbose`: Enable verbose logging (shows debug messages)
 - `--skip-envs`: Skip environment recreation (by default environments are recreated)
 - `--org-to-org`: Migrate only organization-level secrets (requires `--org-to-org` flag, ignores repo and env secrets)
+- `--source-endpoint`: GitHub API endpoint for source (default: `https://api.github.com`)
+- `--target-endpoint`: GitHub API endpoint for target (default: `https://api.github.com`)
 
 ### Environment Variables
 
 - `GITHUB_TOKEN`: If set, uses this token for both source and target authentication (must have permissions for both repos)
+- `SOURCE_ENDPOINT`: GitHub API endpoint for source organization/repository
+- `TARGET_ENDPOINT`: GitHub API endpoint for target organization/repository
+
+### Custom Endpoints (GHEC Data Residency, GHES, EMU)
+
+The tool supports custom GitHub API endpoints for:
+- **GHEC Data Residency**: GitHub Enterprise Cloud with data residency requirements
+- **GHEC EMU**: GitHub Enterprise Cloud with Enterprise Managed Users
+- **GHES**: GitHub Enterprise Server (self-hosted)
+
+#### Endpoint URL Formats
+
+- **Standard GitHub.com**: `https://api.github.com` (default)
+- **GHEC Data Residency (US)**: `https://us.api.github.com`
+- **GHEC Data Residency (EU)**: `https://eu.api.github.com`
+- **GitHub Enterprise Server**: `https://github.example.com/api/v3`
+
+#### Examples
+
+**Migrate from GitHub.com to GHEC US Data Residency:**
+```bash
+gh secrets-migrator \
+  --source-org myorg \
+  --source-repo myrepo \
+  --target-org targetorg \
+  --target-repo targetrepo \
+  --target-endpoint https://us.api.github.com
+```
+
+**Migrate from GHEC EU to GitHub.com:**
+```bash
+gh secrets-migrator \
+  --source-org myorg \
+  --source-repo myrepo \
+  --target-org targetorg \
+  --target-repo targetrepo \
+  --source-endpoint https://eu.api.github.com
+```
+
+**Migrate between different GHEC Data Residency regions:**
+```bash
+gh secrets-migrator \
+  --source-org myorg \
+  --source-repo myrepo \
+  --target-org targetorg \
+  --target-repo targetrepo \
+  --source-endpoint https://us.api.github.com \
+  --target-endpoint https://eu.api.github.com
+```
+
+**Migrate from GitHub Enterprise Server:**
+```bash
+gh secrets-migrator \
+  --source-org myorg \
+  --source-repo myrepo \
+  --target-org targetorg \
+  --target-repo targetrepo \
+  --source-endpoint https://github.example.com/api/v3
+```
+
+**Using environment variables:**
+```bash
+export SOURCE_ENDPOINT=https://us.api.github.com
+export TARGET_ENDPOINT=https://eu.api.github.com
+
+gh secrets-migrator \
+  --source-org myorg \
+  --source-repo myrepo \
+  --target-org targetorg \
+  --target-repo targetrepo
+```
+
+**Organization-to-Organization migration with custom endpoints:**
+```bash
+gh secrets-migrator \
+  --source-org myorg \
+  --source-repo .github \
+  --target-org targetorg \
+  --source-endpoint https://us.api.github.com \
+  --target-endpoint https://eu.api.github.com \
+  --org-to-org
+```
+
+**Note**: GHEC EMU uses the same endpoint as standard GitHub.com (`https://api.github.com`) but with organization-specific authentication and access patterns.
 
 ## Security
 
@@ -626,16 +713,18 @@ gh secrets-migrator [OPTIONS]
 # or: python main.py [OPTIONS]
 
 Options:
-  --source-org TEXT       Source organization name [required]
-  --source-repo TEXT      Source repository name [required]
-  --target-org TEXT       Target organization name [required]
-  --target-repo TEXT      Target repository name [required]
-  --source-pat TEXT       Source Personal Access Token (defaults to GITHUB_TOKEN)
-  --target-pat TEXT       Target Personal Access Token (defaults to GITHUB_TOKEN)
-  --verbose              Enable verbose logging
-  --skip-envs            Skip environment recreation
-  --org-to-org           Migrate only organization-level secrets
-  --help                 Show help message
+  --source-org TEXT         Source organization name [required]
+  --source-repo TEXT        Source repository name [required]
+  --target-org TEXT         Target organization name [required]
+  --target-repo TEXT        Target repository name [conditionally required]
+  --source-pat TEXT         Source Personal Access Token (defaults to GITHUB_TOKEN)
+  --target-pat TEXT         Target Personal Access Token (defaults to GITHUB_TOKEN)
+  --source-endpoint TEXT    GitHub API endpoint for source (default: https://api.github.com)
+  --target-endpoint TEXT    GitHub API endpoint for target (default: https://api.github.com)
+  --verbose                 Enable verbose logging
+  --skip-envs               Skip environment recreation
+  --org-to-org              Migrate only organization-level secrets
+  --help                    Show help message
 ```
 
 ## License
