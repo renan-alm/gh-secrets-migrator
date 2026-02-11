@@ -1,19 +1,40 @@
 """Workflow generation for secrets migration."""
 from typing import Dict, List, Optional
+from urllib.parse import urlparse
 # flake8: noqa: E501
 
 # Default GitHub API endpoint
 DEFAULT_GITHUB_ENDPOINT = "https://api.github.com"
 
 
-def extract_gh_host(endpoint: str) -> str:
-    """Extract hostname from API endpoint for GH_HOST environment variable.
+def normalize_endpoint(endpoint: str) -> str:
+    """Normalize an endpoint URL by removing trailing slashes and ensuring consistent format.
     
     Args:
         endpoint: GitHub API endpoint URL
         
     Returns:
-        Hostname for GH_HOST (e.g., 'us.api.github.com', 'github.example.com/api/v3')
+        Normalized endpoint URL
+        
+    Examples:
+        >>> normalize_endpoint('https://api.github.com/')
+        'https://api.github.com'
+        >>> normalize_endpoint('https://api.github.com')
+        'https://api.github.com'
+    """
+    return endpoint.rstrip("/")
+
+
+def extract_gh_host(endpoint: str) -> str:
+    """Extract hostname from API endpoint for GH_HOST environment variable.
+    
+    GH_HOST should be just the hostname (and optional port), without any path.
+    
+    Args:
+        endpoint: GitHub API endpoint URL
+        
+    Returns:
+        Hostname for GH_HOST (e.g., 'api.github.com', 'github.example.com:8080')
     
     Examples:
         >>> extract_gh_host('https://api.github.com')
@@ -21,13 +42,18 @@ def extract_gh_host(endpoint: str) -> str:
         >>> extract_gh_host('https://us.api.github.com')
         'us.api.github.com'
         >>> extract_gh_host('https://github.example.com/api/v3')
-        'github.example.com/api/v3'
+        'github.example.com'
+        >>> extract_gh_host('http://localhost:8080/api/v3')
+        'localhost:8080'
     """
-    return endpoint.replace("https://", "").replace("http://", "").rstrip("/")
+    parsed = urlparse(endpoint)
+    return parsed.netloc
 
 
 def should_set_gh_host(endpoint: str) -> bool:
     """Check if GH_HOST should be set for the given endpoint.
+    
+    Normalizes endpoints before comparison to handle equivalent URLs.
     
     Args:
         endpoint: GitHub API endpoint URL
@@ -35,7 +61,36 @@ def should_set_gh_host(endpoint: str) -> bool:
     Returns:
         True if GH_HOST should be set (non-default endpoint), False otherwise
     """
-    return endpoint != DEFAULT_GITHUB_ENDPOINT
+    return normalize_endpoint(endpoint) != DEFAULT_GITHUB_ENDPOINT
+
+
+def derive_web_host(api_endpoint: str) -> str:
+    """Derive the web host URL from an API endpoint.
+    
+    For standard GitHub.com and GHEC Data Residency:
+    - https://api.github.com -> https://github.com
+    - https://us.api.github.com -> https://us.github.com
+    - https://eu.api.github.com -> https://eu.github.com
+    
+    For GHES:
+    - https://github.example.com/api/v3 -> https://github.example.com
+    
+    Args:
+        api_endpoint: GitHub API endpoint URL
+        
+    Returns:
+        Web host URL for constructing user-facing links
+    """
+    parsed = urlparse(api_endpoint)
+    
+    # For standard github.com and GHEC Data Residency, replace api. prefix
+    if parsed.hostname and parsed.hostname.endswith(".github.com"):
+        # Remove 'api.' prefix if present
+        web_hostname = parsed.hostname.replace("api.", "", 1)
+        return f"{parsed.scheme}://{web_hostname}"
+    
+    # For GHES or other deployments, use the base URL without path
+    return f"{parsed.scheme}://{parsed.netloc}"
 
 
 def generate_environment_secret_steps(env_secrets: Dict[str, List[str]], source_org: str, source_repo: str, target_org: str, target_repo: str, target_endpoint: str = DEFAULT_GITHUB_ENDPOINT) -> str:

@@ -4,8 +4,10 @@ import pytest
 from src.core.config import MigrationConfig
 from src.clients.github import GitHubClient
 from src.core.workflow_generator import (
+    normalize_endpoint,
     extract_gh_host,
     should_set_gh_host,
+    derive_web_host,
     DEFAULT_GITHUB_ENDPOINT,
     generate_environment_secret_steps,
     generate_org_secret_steps,
@@ -13,6 +15,22 @@ from src.core.workflow_generator import (
     generate_workflow
 )
 from src.utils.logger import Logger
+
+
+class TestNormalizeEndpoint:
+    """Test the normalize_endpoint helper function."""
+
+    def test_normalize_with_trailing_slash(self):
+        """Test normalizing endpoint with trailing slash."""
+        assert normalize_endpoint("https://api.github.com/") == "https://api.github.com"
+
+    def test_normalize_without_trailing_slash(self):
+        """Test normalizing endpoint without trailing slash."""
+        assert normalize_endpoint("https://api.github.com") == "https://api.github.com"
+
+    def test_normalize_ghec_with_trailing_slash(self):
+        """Test normalizing GHEC endpoint with trailing slash."""
+        assert normalize_endpoint("https://us.api.github.com/") == "https://us.api.github.com"
 
 
 class TestExtractGhHost:
@@ -43,6 +61,30 @@ class TestExtractGhHost:
         assert extract_gh_host("https://api.github.com/") == "api.github.com"
 
 
+class TestDeriveWebHost:
+    """Test the derive_web_host helper function."""
+
+    def test_derive_standard_github(self):
+        """Test deriving web host from standard GitHub.com API endpoint."""
+        assert derive_web_host("https://api.github.com") == "https://github.com"
+
+    def test_derive_ghec_us(self):
+        """Test deriving web host from GHEC US API endpoint."""
+        assert derive_web_host("https://us.api.github.com") == "https://us.github.com"
+
+    def test_derive_ghec_eu(self):
+        """Test deriving web host from GHEC EU API endpoint."""
+        assert derive_web_host("https://eu.api.github.com") == "https://eu.github.com"
+
+    def test_derive_ghes(self):
+        """Test deriving web host from GHES API endpoint."""
+        assert derive_web_host("https://github.example.com/api/v3") == "https://github.example.com"
+
+    def test_derive_ghes_with_port(self):
+        """Test deriving web host from GHES with port."""
+        assert derive_web_host("https://github.example.com:8443/api/v3") == "https://github.example.com:8443"
+
+
 class TestShouldSetGhHost:
     """Test the should_set_gh_host helper function."""
 
@@ -50,6 +92,10 @@ class TestShouldSetGhHost:
         """Test that GH_HOST should not be set for default endpoint."""
         assert should_set_gh_host(DEFAULT_GITHUB_ENDPOINT) is False
         assert should_set_gh_host("https://api.github.com") is False
+
+    def test_should_not_set_for_default_with_trailing_slash(self):
+        """Test that GH_HOST should not be set for default endpoint with trailing slash."""
+        assert should_set_gh_host("https://api.github.com/") is False
 
     def test_should_set_for_ghec_us(self):
         """Test that GH_HOST should be set for GHEC US."""
@@ -271,8 +317,8 @@ class TestWorkflowGeneratorWithEndpoints:
             repo_secrets=repo_secrets,
             target_endpoint="https://github.example.com/api/v3"
         )
-        # Should contain GH_HOST with GHES hostname
-        assert "GH_HOST: 'github.example.com/api/v3'" in workflow
+        # Should contain GH_HOST with only hostname (no path)
+        assert "GH_HOST: 'github.example.com'" in workflow
 
     def test_workflow_with_env_secrets_custom_endpoint(self):
         """Test workflow with environment secrets and custom endpoint."""
