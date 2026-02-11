@@ -32,11 +32,11 @@ class TestExtractGhHost:
 
     def test_extract_ghes(self):
         """Test extracting hostname from GHES."""
-        assert extract_gh_host("https://github.example.com/api/v3") == "github.example.com/api/v3"
+        assert extract_gh_host("https://github.example.com/api/v3") == "github.example.com"
 
     def test_extract_http(self):
         """Test extracting hostname from HTTP endpoint."""
-        assert extract_gh_host("http://localhost:8080/api/v3") == "localhost:8080/api/v3"
+        assert extract_gh_host("http://localhost:8080/api/v3") == "localhost:8080"
 
     def test_extract_with_trailing_slash(self):
         """Test extracting hostname with trailing slash."""
