@@ -115,7 +115,7 @@ def generate_org_secret_steps(org_secrets: List[str], target_org: str, org_secre
           
           # Add repositories to the secret scope
           echo "Adding repositories to secret scope..."
-          REPOS_ARRAY=($SELECTED_REPOS)
+          IFS=' ' read -r -a REPOS_ARRAY <<< "$SELECTED_REPOS"
           SUCCESS_COUNT=0
           FAIL_COUNT=0
           
