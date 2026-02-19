@@ -248,12 +248,12 @@ class TestWorkflowGenerationWithScoping:
         }
         
         workflow = generate_org_secret_steps(org_secrets, "target-org", org_secrets_scope)
-        
+
         assert "Migrate Org Secret - SECRET_SELECTED" in workflow
         assert "SECRET_SELECTED" in workflow
         assert "--visibility selected" in workflow
         assert "Adding repositories to secret scope" in workflow
-        assert '"repo1" "repo2"' in workflow
+        assert "repo1 repo2" in workflow
     
     def test_generate_org_secret_steps_with_selected_no_repos(self):
         """Test workflow generation for org secret with selected visibility but no repos."""
@@ -358,12 +358,12 @@ class TestOrgSecretScopingEdgeCases:
         }
         
         workflow = generate_org_secret_steps(org_secrets, "target-org", org_secrets_scope)
-        
+
         assert "SECRET" in workflow
         assert "--visibility selected" in workflow
         # Check that all repos are in the list
         for repo in many_repos[:5]:  # Check first few
-            assert f'"{repo}"' in workflow
+            assert repo in workflow
     
     def test_special_characters_in_repo_names(self):
         """Test handling of special characters in repository names."""
@@ -376,8 +376,8 @@ class TestOrgSecretScopingEdgeCases:
         }
         
         workflow = generate_org_secret_steps(org_secrets, "target-org", org_secrets_scope)
-        
+
         assert "SECRET" in workflow
-        assert '"repo-with-dash"' in workflow
-        assert '"repo_with_underscore"' in workflow
-        assert '"repo.with.dot"' in workflow
+        assert "repo-with-dash" in workflow
+        assert "repo_with_underscore" in workflow
+        assert "repo.with.dot" in workflow

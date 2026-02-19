@@ -82,11 +82,11 @@ def generate_org_secret_steps(org_secrets: List[str], target_org: str, org_secre
         # Base command to create the secret
         visibility = scope_info.get('visibility', 'all') if scope_info else 'all'
         selected_repos = scope_info.get('selected_repositories', []) if scope_info else []
-        
+
         # Build the step based on visibility
         if visibility == 'selected' and selected_repos:
             # Create secret with selected visibility and add repositories
-            repos_list = ' '.join([f'"{repo}"' for repo in selected_repos])
+            repos_list = ' '.join(selected_repos)
             step = f"""      - name: Migrate Org Secret - {secret_name}
         env:
           TARGET_ORG: '{target_org}'
@@ -101,7 +101,7 @@ def generate_org_secret_steps(org_secrets: List[str], target_org: str, org_secre
           echo "=========================================="
           echo "Migrating organization secret: $SECRET_NAME (with repository scoping)"
           echo "=========================================="
-          
+
           # Create secret in target organization with selected visibility
           if gh secret set "$SECRET_NAME" \\
             --body "$SECRET_VALUE" \\
@@ -112,23 +112,23 @@ def generate_org_secret_steps(org_secrets: List[str], target_org: str, org_secre
             echo "❌ ERROR: Failed to create secret '$SECRET_NAME' in target organization '$TARGET_ORG'"
             exit 1
           fi
-          
+
           # Add repositories to the secret scope
           echo "Adding repositories to secret scope..."
           IFS=' ' read -r -a REPOS_ARRAY <<< "$SELECTED_REPOS"
           SUCCESS_COUNT=0
           FAIL_COUNT=0
-          
-          for REPO_NAME in "${REPOS_ARRAY[@]}"; do
+
+          for REPO_NAME in "${{REPOS_ARRAY[@]}}"; do
             echo "Checking if repository $REPO_NAME exists in $TARGET_ORG..."
-            
+
             # Check if repo exists using gh api
             if gh api "repos/$TARGET_ORG/$REPO_NAME" >/dev/null 2>&1; then
               echo "  Repository $REPO_NAME exists, adding to secret scope..."
-              
+
               # Get the repository ID
               REPO_ID=$(gh api "repos/$TARGET_ORG/$REPO_NAME" --jq '.id')
-              
+
               # Add repository to secret using the GitHub API
               if gh api \\
                 --method PUT \\
@@ -145,10 +145,10 @@ def generate_org_secret_steps(org_secrets: List[str], target_org: str, org_secre
               FAIL_COUNT=$((FAIL_COUNT + 1))
             fi
           done
-          
+
           echo ""
           echo "Summary: $SUCCESS_COUNT repositories added, $FAIL_COUNT skipped"
-          
+
           if [ $SUCCESS_COUNT -eq 0 ]; then
             echo "⚠️  Warning: No repositories were added to the secret scope"
             echo "The secret '$SECRET_NAME' was created with selected visibility but no repositories"
