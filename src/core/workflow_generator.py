@@ -119,9 +119,7 @@ def generate_org_secret_steps(org_secrets: List[str], target_org: str, org_secre
           SUCCESS_COUNT=0
           FAIL_COUNT=0
           
-          for REPO in "${{REPOS_ARRAY[@]}}"; do
-            # Remove quotes from repo name
-            REPO_NAME=$(echo "$REPO" | tr -d '"')
+          for REPO_NAME in "${REPOS_ARRAY[@]}"; do
             echo "Checking if repository $REPO_NAME exists in $TARGET_ORG..."
             
             # Check if repo exists using gh api
