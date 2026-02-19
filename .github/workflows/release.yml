@@ -276,8 +276,19 @@ jobs:
 
   release:
     name: Build and Release
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     needs: [validate]
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: macos-13
+            platform: darwin-amd64
+          - os: macos-14
+            platform: darwin-arm64
+          - os: windows-latest
+            platform: windows
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -299,6 +310,7 @@ jobs:
         with:
           name: release-notes
           path: /tmp
+        if: matrix.platform == 'linux'
 
       - name: Update release notes
         env:
@@ -311,3 +323,4 @@ jobs:
           else
             echo "⚠️ No release notes file found"
           fi
+        if: matrix.platform == 'linux'
