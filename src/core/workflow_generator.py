@@ -309,7 +309,8 @@ def generate_org_secret_steps(
           if gh secret set "$SECRET_NAME" \\
             --body "$SECRET_VALUE" \\
             --org "$TARGET_ORG" \\
-            --visibility selected; then
+            --visibility selected \\
+            --no-repos-selected; then
             echo "✓ Successfully migrated '$SECRET_NAME' to organization '$TARGET_ORG' with selected visibility (no repositories)"
             echo "⚠️  Note: The secret has selected visibility but no repositories in scope"
           else

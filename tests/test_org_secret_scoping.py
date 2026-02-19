@@ -269,6 +269,7 @@ class TestWorkflowGenerationWithScoping:
         
         assert "Migrate Org Secret - SECRET_SELECTED_EMPTY" in workflow
         assert "--visibility selected" in workflow
+        assert "--no-repos-selected" in workflow
         assert "selected visibility, no repositories" in workflow
     
     def test_generate_workflow_with_org_secrets_scope(self):
@@ -345,6 +346,7 @@ class TestOrgSecretScopingEdgeCases:
         
         assert "SECRET" in workflow
         assert "--visibility selected" in workflow
+        assert "--no-repos-selected" in workflow
     
     def test_many_selected_repositories(self):
         """Test handling of many selected repositories."""
