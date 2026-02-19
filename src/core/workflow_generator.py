@@ -1,5 +1,5 @@
 """Workflow generation for secrets migration."""
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 # flake8: noqa: E501
 
 def generate_environment_secret_steps(env_secrets: Dict[str, List[str]], source_org: str, source_repo: str, target_org: str, target_repo: str) -> str:
@@ -53,7 +53,7 @@ def generate_environment_secret_steps(env_secrets: Dict[str, List[str]], source_
     return "\n".join(steps)
 
 
-def generate_org_secret_steps(org_secrets: List[str], target_org: str, org_secrets_scope: Optional[Dict[str, Dict[str, any]]] = None) -> str:
+def generate_org_secret_steps(org_secrets: List[str], target_org: str, org_secrets_scope: Optional[Dict[str, Dict[str, Any]]] = None) -> str:
     """Generate workflow steps for each organization secret.
     
     Args:
@@ -186,7 +186,7 @@ def generate_org_secret_steps(org_secrets: List[str], target_org: str, org_secre
 """
         else:
             # Create secret with all/private visibility (default behavior)
-            visibility_flag = f"--visibility {visibility}" if visibility in ['all', 'private'] else ""
+            visibility_flag = f" --visibility {visibility}" if visibility in ['all', 'private'] else ""
             step = f"""      - name: Migrate Org Secret - {secret_name}
         env:
           TARGET_ORG: '{target_org}'
@@ -200,11 +200,11 @@ def generate_org_secret_steps(org_secrets: List[str], target_org: str, org_secre
           echo "=========================================="
           echo "Migrating organization secret: $SECRET_NAME"
           echo "=========================================="
-          
+
           # Create secret in target organization with the value from workflow secrets
           if gh secret set "$SECRET_NAME" \\
             --body "$SECRET_VALUE" \\
-            --org "$TARGET_ORG" {visibility_flag}; then
+            --org "$TARGET_ORG"{visibility_flag}; then
             echo "✓ Successfully migrated '$SECRET_NAME' to organization '$TARGET_ORG'"
           else
             echo "❌ ERROR: Failed to create secret '$SECRET_NAME' in target organization '$TARGET_ORG'"
@@ -278,7 +278,7 @@ def generate_workflow(
     env_secrets: Optional[Dict[str, List[str]]] = None,
     org_secrets: Optional[List[str]] = None,
     repo_secrets: Optional[List[str]] = None,
-    org_secrets_scope: Optional[Dict[str, Dict[str, any]]] = None
+    org_secrets_scope: Optional[Dict[str, Dict[str, Any]]] = None
 ) -> str:
     """Generate the GitHub Actions workflow for secret migration.
     

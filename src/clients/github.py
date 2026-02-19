@@ -1,6 +1,6 @@
 """GitHub API client wrapper."""
 # flake8: noqa: E501
-from typing import List, Dict
+from typing import List, Dict, Any
 from github import Github, UnknownObjectException
 from src.utils.logger import Logger
 
@@ -323,7 +323,7 @@ class GitHubClient:
             self.log.error(f"Failed to delete organization secret {secret_name}: {type(e).__name__}: {e}")
             raise RuntimeError(f"Failed to delete organization secret {secret_name}: {e}")
 
-    def get_org_secret_scope(self, org: str, secret_name: str) -> Dict[str, any]:
+    def get_org_secret_scope(self, org: str, secret_name: str) -> Dict[str, Any]:
         """Get the visibility and selected repositories for an organization secret.
 
         Args:
@@ -359,7 +359,7 @@ class GitHubClient:
             self.log.error(f"Failed to get scope for organization secret {secret_name}: {type(e).__name__}: {e}")
             raise RuntimeError(f"Failed to get scope for organization secret {secret_name}: {e}")
 
-    def get_org_secrets_with_scope(self, org: str) -> Dict[str, Dict[str, any]]:
+    def get_org_secrets_with_scope(self, org: str) -> Dict[str, Dict[str, Any]]:
         """Get all organization secrets with their scope information.
 
         Args:
