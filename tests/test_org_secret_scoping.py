@@ -1,6 +1,6 @@
 """Tests for organization secret scoping functionality."""
 from datetime import datetime, timezone
-from unittest.mock import Mock, patch, call
+from unittest.mock import Mock, patch
 from src.clients.github import GitHubClient
 from src.core.workflow_generator import generate_org_secret_steps, generate_workflow
 from src.utils.logger import Logger
