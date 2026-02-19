@@ -6,6 +6,57 @@ This changelog is auto-generated from [Conventional Commits](https://www.convent
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.3.0] - 2026-01-21
+## [0.7.0] - 2026-02-19
+
+### Added
+
+- add darwin-arm64 support with matrix build strategy (930b407)
+
+### Changed
+
+- Update platform for macos-14 in release workflow (92bbf85)
+
+### Fixed
+
+- use macos-14-large for darwin-amd64 to avoid deprecated macos-13 (930b407)
+
+### Other
+
+- Add darwin-arm64 build support via matrix strategy (#66) (930b407)
+
+## [0.7.0] - 2026-02-19
+
+### Added
+
+- add darwin-arm64 support with matrix build strategy (930b407)
+
+### Fixed
+
+- use macos-14 for darwin-amd64 to avoid deprecated macos-13 (930b407)
+
+### Other
+
+- Add darwin-arm64 build support via matrix strategy (#66) (930b407)
+
+## [0.6.0] - 2026-02-11
+
+### Added
+
+- add endpoint configuration support for GHEC Data Residency and GHES (ae9ce01)
+
+### Changed
+
+- extract URL parsing logic and improve test naming (ae9ce01)
+- add constant and helper for endpoint comparison logic (ae9ce01)
+
+### Fixed
+
+- correct GH_HOST extraction, normalize endpoints, and derive web URLs from API endpoints (ae9ce01)
+
+### Other
+
+- Add custom endpoint support for GHEC Data Residency and GHES (#63) (ae9ce01)
+
 ## [0.5.0] - 2026-02-02
 
 ### Added

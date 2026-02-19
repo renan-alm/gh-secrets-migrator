@@ -14,7 +14,9 @@ class MigrationConfig:
         target_repo: str = "",
         verbose: bool = False,
         skip_envs: bool = False,
-        org_to_org: bool = False
+        org_to_org: bool = False,
+        source_endpoint: str = "https://api.github.com",
+        target_endpoint: str = "https://api.github.com"
     ):
         self.source_org = source_org
         self.source_repo = source_repo
@@ -25,3 +27,5 @@ class MigrationConfig:
         self.verbose = verbose
         self.skip_envs = skip_envs
         self.org_to_org = org_to_org
+        self.source_endpoint = source_endpoint
+        self.target_endpoint = target_endpoint

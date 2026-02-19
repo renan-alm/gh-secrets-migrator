@@ -4,6 +4,7 @@ import click
 from src.utils.logger import Logger
 from src.core.migrator import Migrator
 from src.core.config import MigrationConfig
+from src.core.workflow_generator import normalize_endpoint
 
 
 @click.command()
@@ -62,6 +63,18 @@ from src.core.config import MigrationConfig
     envvar="ORG_TO_ORG",
     help="Migrate organization secrets only (ignores repo and environment secrets)"
 )
+@click.option(
+    "--source-endpoint",
+    default="https://api.github.com",
+    envvar="SOURCE_ENDPOINT",
+    help="GitHub API endpoint for source (default: https://api.github.com)"
+)
+@click.option(
+    "--target-endpoint",
+    default="https://api.github.com",
+    envvar="TARGET_ENDPOINT",
+    help="GitHub API endpoint for target (default: https://api.github.com)"
+)
 def migrate(
     source_org,
     source_repo,
@@ -72,6 +85,8 @@ def migrate(
     verbose,
     skip_envs,
     org_to_org,
+    source_endpoint,
+    target_endpoint,
 ):
     """Migrate GitHub secrets from one organization/repository to another.
 
@@ -125,6 +140,16 @@ def migrate(
         )
         raise SystemExit(1)
 
+    # Normalize endpoints to handle trailing slashes and ensure consistency
+    source_endpoint = normalize_endpoint(source_endpoint)
+    target_endpoint = normalize_endpoint(target_endpoint)
+
+    # Log endpoint configuration if non-default
+    if source_endpoint != "https://api.github.com":
+        logger.info(f"Using custom source endpoint: {source_endpoint}")
+    if target_endpoint != "https://api.github.com":
+        logger.info(f"Using custom target endpoint: {target_endpoint}")
+
     try:
         config = MigrationConfig(
             source_org=source_org,
@@ -135,7 +160,9 @@ def migrate(
             target_pat=target_pat_value,
             verbose=verbose,
             skip_envs=skip_envs,
-            org_to_org=org_to_org
+            org_to_org=org_to_org,
+            source_endpoint=source_endpoint,
+            target_endpoint=target_endpoint
         )
 
         migrator = Migrator(config, logger)
