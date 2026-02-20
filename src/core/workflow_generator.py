@@ -362,72 +362,6 @@ def generate_org_secret_steps(
     return "\n".join(steps)
 
 
-def generate_repo_secret_steps(repo_secrets: List[str], target_org: str, target_repo: str, target_endpoint: str = DEFAULT_GITHUB_ENDPOINT) -> str:
-    """Generate workflow steps for each repository secret.
-    
-    Args:
-        repo_secrets: List of repository secret names
-        target_org: Target organization
-        target_repo: Target repository
-        target_endpoint: Target GitHub API endpoint (default: https://api.github.com)
-        
-    Returns:
-        String containing all the generated workflow steps
-    """
-    steps = []
-    
-    # Extract hostname from API endpoint for GH_HOST
-    gh_host = extract_gh_host(target_endpoint)
-    gh_env_vars = f"GH_HOST: '{gh_host}'" if should_set_gh_host(target_endpoint) else ""
-    
-    for secret_name in repo_secrets:
-        # Skip system secrets
-        if secret_name in ["github_token", "SECRETS_MIGRATOR_PAT", "SECRETS_MIGRATOR_TARGET_PAT", "SECRETS_MIGRATOR_SOURCE_PAT"]:
-            continue
-
-        # Create a display name with spaces to prevent GitHub masking if the name matches a value
-        display_name = " ".join(secret_name)
-
-        # Build env section with optional GH_HOST
-        env_lines = [
-            f"          TARGET_ORG: '{target_org}'",
-            f"          TARGET_REPO: '{target_repo}'",
-            f"          SECRET_NAME: '{secret_name}'",
-            f"          SECRET_VALUE: ${{{{ secrets.{secret_name} }}}}",
-            f"          GH_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_TARGET_PAT }}}}"
-        ]
-        if gh_env_vars:
-            env_lines.append(f"          {gh_env_vars}")
-        
-        env_section = "\n".join(env_lines)
-
-        step = f"""      - name: Migrate Repo Secret - {secret_name}
-        env:
-{env_section}
-        run: |
-          #!/bin/bash
-          set -e
-
-          echo "=========================================="
-          echo "Migrating repository secret: {display_name}"
-          echo "=========================================="
-          
-          # Create secret in target repo
-          if gh secret set "$SECRET_NAME" \\
-            --body "$SECRET_VALUE" \\
-            --repo "$TARGET_ORG/$TARGET_REPO"; then
-            echo "✓ Successfully migrated '{display_name}' to target repo"
-          else
-            echo "❌ ERROR: Failed to create secret '{display_name}'"
-            exit 1
-          fi
-        shell: bash
-"""
-        steps.append(step)
-    
-    return "\n".join(steps)
-
-
 def generate_workflow(
     source_org: str,
     source_repo: str,
@@ -471,18 +405,32 @@ def generate_workflow(
     
     # Repo-to-repo: include repository secrets step
     if not org_secrets:
-        if repo_secrets is not None and len(repo_secrets) > 0:
-            # Use individual steps for each repo secret (cleaner and easier to debug)
-            migration_steps = generate_repo_secret_steps(
-                repo_secrets, target_org, target_repo, target_endpoint
-            )
-        elif repo_secrets is None:
-            # Fallback: bulk migration of all secrets
-            # Extract hostname from API endpoint for GH_HOST
-            gh_host = extract_gh_host(target_endpoint)
-            gh_env_vars = f"\n          GH_HOST: '{gh_host}'" if should_set_gh_host(target_endpoint) else ""
-            
-            migration_steps = f"""      - name: Populate Repository Secrets
+        # Build list of secrets to migrate as a bash array
+        if repo_secrets is not None:
+            # Convert to bash array format: ("SECRET1" "SECRET2" "SECRET3")
+            secrets_array = " ".join([f'"{s}"' for s in repo_secrets])
+            allowed_secrets_check = f"""
+          # List of repository-level secrets to migrate (excludes org secrets)
+          ALLOWED_SECRETS=({secrets_array})
+          
+          # Check if secret is in allowed list
+          SECRET_ALLOWED=0
+          for ALLOWED_SECRET in "${{ALLOWED_SECRETS[@]}}"; do
+            if [[ "$SECRET_NAME" == "$ALLOWED_SECRET" ]]; then
+              SECRET_ALLOWED=1
+              break
+            fi
+          done
+          
+          if [[ $SECRET_ALLOWED -eq 0 ]]; then
+            echo "Skipping organization secret: $SECRET_NAME"
+            continue
+          fi"""
+        else:
+            # Fallback: migrate all non-system secrets (old behavior)
+            allowed_secrets_check = ""
+        
+        migration_steps = f"""      - name: Populate Repository Secrets
         id: migrate
         env:
           REPO_SECRETS: ${{{{ toJSON(secrets) }}}}
@@ -501,11 +449,7 @@ def generate_workflow(
             if [[ "$SECRET_NAME" == "github_token" || "$SECRET_NAME" == "SECRETS_MIGRATOR_PAT" || "$SECRET_NAME" == "SECRETS_MIGRATOR_TARGET_PAT" || "$SECRET_NAME" == "SECRETS_MIGRATOR_SOURCE_PAT" ]]; then
               continue
             fi
-<<<<<<< HEAD
-
-=======
 {allowed_secrets_check}
->>>>>>> bccc434 (Address code review feedback)
             echo "Processing: $SECRET_NAME"
             
             # Echo secret, reverse twice, and capture output
