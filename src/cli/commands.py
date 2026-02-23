@@ -119,24 +119,44 @@ def migrate(
         logger.info(f"Source: {source_org}/{source_repo}")
         logger.info(f"Target: {target_org}/{target_repo}")
 
-    # Check for GITHUB_TOKEN environment variable
+    # Check for authentication tokens (prioritize specific PATs over GITHUB_TOKEN)
     github_token = os.getenv("GITHUB_TOKEN")
-    if github_token:
-        logger.info(
-            "GITHUB_TOKEN environment variable detected, "
-            "using it for both source and target authentication"
-        )
-        source_pat_value = github_token
-        target_pat_value = github_token
-    else:
+
+    # Determine source PAT (SOURCE_PAT takes precedence over GITHUB_TOKEN)
+    if source_pat:
         source_pat_value = source_pat
+        source_token_source = "SOURCE_PAT"
+    elif github_token:
+        source_pat_value = github_token
+        source_token_source = "GITHUB_TOKEN"
+    else:
+        source_pat_value = ""
+        source_token_source = None
+
+    # Determine target PAT (TARGET_PAT takes precedence over GITHUB_TOKEN)
+    if target_pat:
         target_pat_value = target_pat
+        target_token_source = "TARGET_PAT"
+    elif github_token:
+        target_pat_value = github_token
+        target_token_source = "GITHUB_TOKEN"
+    else:
+        target_pat_value = ""
+        target_token_source = None
+
+    # Log authentication configuration
+    if source_token_source and target_token_source:
+        if source_token_source == target_token_source == "GITHUB_TOKEN":
+            logger.info("Using GITHUB_TOKEN for both source and target authentication")
+        else:
+            logger.info(f"Using {source_token_source} for source authentication")
+            logger.info(f"Using {target_token_source} for target authentication")
 
     # Validate we have PATs for both
     if not source_pat_value or not target_pat_value:
         logger.error(
             "source-pat and target-pat are required "
-            "(or set GITHUB_TOKEN environment variable)"
+            "(or set SOURCE_PAT/TARGET_PAT or GITHUB_TOKEN environment variables)"
         )
         raise SystemExit(1)
 
