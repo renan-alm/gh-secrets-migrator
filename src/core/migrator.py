@@ -399,22 +399,71 @@ class Migrator:
             source_repo = self.config.source_repo
             target_repo = self.config.target_repo or self.config.source_repo
             
-            # Get list of org secrets from source
-            org_secret_names = self.source_api.list_org_secrets(self.config.source_org)
+            # Get list of org secrets with scope from source
+            self.log.debug("Fetching organization secrets with scope information...")
+            org_secrets_with_scope = self.source_api.get_org_secrets_with_scope(self.config.source_org)
             
             # Filter out system secrets
-            secrets_to_migrate = [
-                name for name in org_secret_names
+            secrets_to_migrate = {
+                name: scope_info
+                for name, scope_info in org_secrets_with_scope.items()
                 if name not in ("SECRETS_MIGRATOR_PAT", "SECRETS_MIGRATOR_TARGET_PAT", "SECRETS_MIGRATOR_SOURCE_PAT")
-            ]
+            }
             
             if not secrets_to_migrate:
                 self.log.info("No organization secrets to migrate (found only system secrets)")
                 return
             
             self.log.info(f"Organization secrets to migrate ({len(secrets_to_migrate)} total):")
-            for name in secrets_to_migrate:
-                self.log.info(f"  - {name}")
+            for name, scope_info in secrets_to_migrate.items():
+                visibility = scope_info.get('visibility', 'all')
+                selected_repos = scope_info.get('selected_repositories', [])
+                
+                if visibility == 'selected' and selected_repos:
+                    self.log.info(f"  - {name} (scoped to {len(selected_repos)} repositories)")
+                    for repo in selected_repos[:3]:  # Show first 3 repos
+                        self.log.debug(f"      - {repo}")
+                    if len(selected_repos) > 3:
+                        self.log.debug(f"      ... and {len(selected_repos) - 3} more")
+                else:
+                    self.log.info(f"  - {name} (visibility: {visibility})")
+            
+            # Match repositories between source and target org
+            self.log.info("Checking which repositories exist in target organization...")
+            org_secrets_scope_for_target = {}
+            
+            for secret_name, scope_info in secrets_to_migrate.items():
+                visibility = scope_info.get('visibility', 'all')
+                selected_repos = scope_info.get('selected_repositories', [])
+                
+                if visibility == 'selected' and selected_repos:
+                    # Find matching repositories in target org
+                    matching_repos = self.target_api.get_matching_repos(self.config.target_org, selected_repos)
+                    
+                    # Log the matching results
+                    if matching_repos:
+                        self.log.info(
+                            f"  ✓ Secret '{secret_name}': {len(matching_repos)}/{len(selected_repos)} "
+                            f"repositories exist in target org"
+                        )
+                        for repo in matching_repos[:3]:  # Show first 3 matching repos
+                            self.log.debug(f"      - {repo}")
+                        if len(matching_repos) > 3:
+                            self.log.debug(f"      ... and {len(matching_repos) - 3} more")
+                    else:
+                        self.log.warn(
+                            f"  ⚠️  Secret '{secret_name}': None of the {len(selected_repos)} "
+                            f"source repositories exist in target org"
+                        )
+                    
+                    # Update scope info with matching repositories
+                    org_secrets_scope_for_target[secret_name] = {
+                        'visibility': 'selected',
+                        'selected_repositories': matching_repos
+                    }
+                else:
+                    # Keep original visibility for 'all' or 'private'
+                    org_secrets_scope_for_target[secret_name] = scope_info
             
             branch_name = "migrate-org-secrets"
             
@@ -429,14 +478,17 @@ class Migrator:
                 "SECRETS_MIGRATOR_SOURCE_PAT", self.config.source_pat
             )
             
-            # Step 2: Generate workflow with org secrets
+            # Step 2: Generate workflow with org secrets and scope information
             self.log.info("Generating workflow for organization secret migration...")
             workflow_content = generate_workflow(
-                self.config.source_org, source_repo,
-                self.config.target_org, target_repo,
-                branch_name,
+                source_org=self.config.source_org,
+                source_repo=source_repo,
+                target_org=self.config.target_org,
+                target_repo=target_repo,
+                branch_name=branch_name,
                 env_secrets=None,
-                org_secrets=secrets_to_migrate,
+                org_secrets=list(secrets_to_migrate.keys()),
+                org_secrets_scope=org_secrets_scope_for_target,
                 source_endpoint=self.config.source_endpoint,
                 target_endpoint=self.config.target_endpoint
             )
@@ -617,9 +669,12 @@ class Migrator:
 
         # Step 7: Generate and create workflow file
         workflow = generate_workflow(
-            self.config.source_org, self.config.source_repo,
-            self.config.target_org, self.config.target_repo, branch_name,
-            env_secrets_info,
+            source_org=self.config.source_org,
+            source_repo=self.config.source_repo,
+            target_org=self.config.target_org,
+            target_repo=self.config.target_repo,
+            branch_name=branch_name,
+            env_secrets=env_secrets_info,
             repo_secrets=secrets_to_migrate,
             source_endpoint=self.config.source_endpoint,
             target_endpoint=self.config.target_endpoint

@@ -10,15 +10,19 @@ A GitHub CLI extension to migrate GitHub repository secrets from a source reposi
 ## Features
 
 - ✨ Migrates secrets from one GitHub repository to another
+- � Supports organization-to-organization secret migration
+- 🔍 Repository scoping for organization secrets (maintains visibility settings)
 - 🌍 Recreates repository environments in target repository
 - 🔐 Automatically encrypts secrets using GitHub's public key
 - 🤖 Uses GitHub Actions workflow for automated migration
 - 🔄 Supports both explicit PATs or GITHUB_TOKEN environment variable
 - 🌐 Supports custom endpoints for GHEC Data Residency, GHES, and EMU
+- ⏱️ Automatic rate limit monitoring and handling
 - 📝 Comprehensive logging with verbose mode
 - ✅ Validates PAT permissions before starting migration
 - 🧹 Automatic cleanup of temporary secrets
 - 🚀 Available as a GitHub CLI extension with precompiled binaries
+- 🍎 Native support for macOS (Intel and Apple Silicon), Linux, and Windows
 
 ## Installation
 
@@ -69,7 +73,7 @@ If you prefer to run from source or need to make modifications:
 
 #### Prerequisites
 
-- Python 3.10+
+- Python 3.10 or higher (Python 3.8 and 3.9 are no longer supported as of v0.3.0)
 - GitHub Personal Access Tokens (PAT) with appropriate scopes (see [Permissions](#permissions) section)
 
 #### Setup
@@ -382,20 +386,22 @@ gh secrets-migrator \
 ## How It Works
 
 1. **Validates PAT permissions** - Checks both PATs have necessary scopes before proceeding
-2. **Recreates environments** (unless `--skip-envs` is set) - Creates environments from source repo in target repo:
+2. **Monitors rate limits** - Continuously checks GitHub API rate limits and automatically waits if critically low (< 100 calls remaining)
+3. **Recreates environments** (unless `--skip-envs` is set) - Creates environments from source repo in target repo:
    - Lists all environments from source repository
    - Creates each environment in target repository
    - Gracefully skips if environment already exists (idempotent)
-3. **Lists secrets** - Gets all secrets from source repo (for logging)
-4. **Creates temporary secrets** - Stores both PATs in source repo:
+4. **Lists secrets** - Gets all secrets from source repo (repo, environment, and org secrets for logging)
+5. **Creates temporary secrets** - Stores both PATs in source repo:
    - `SECRETS_MIGRATOR_TARGET_PAT` (encrypted) - Used by workflow to access target repo
    - `SECRETS_MIGRATOR_SOURCE_PAT` (encrypted) - Used by workflow cleanup to delete temporary secrets
-5. **Creates migration branch** - Creates a new branch called `migrate-secrets`
-6. **Pushes workflow** - Commits GitHub Actions workflow to migration branch
-7. **Workflow runs** - Triggered by push to `migrate-secrets` branch:
+6. **Creates migration branch** - Creates a new branch called `migrate-secrets`
+7. **Pushes workflow** - Commits GitHub Actions workflow to migration branch
+8. **Workflow runs** - Triggered by push to `migrate-secrets` branch:
    - Reads all secrets from source repo
    - Filters out system secrets (`SECRETS_MIGRATOR_*`, `github_token`)
-   - For each remaining secret: creates it in target repo using target PAT
+   - For each remaining secret: creates it in target repo/environment/org using target PAT
+   - Maintains organization secret visibility and repository scoping
    - Cleanup (always runs):
      - Deletes `SECRETS_MIGRATOR_TARGET_PAT` from source repo
      - Deletes `SECRETS_MIGRATOR_SOURCE_PAT` from source repo
@@ -437,9 +443,27 @@ make help         # Show all available commands
 
 ### Environment Variables
 
+All CLI flags can also be set via environment variables:
+
+**Authentication:**
 - `GITHUB_TOKEN`: If set, uses this token for both source and target authentication (must have permissions for both repos)
-- `SOURCE_ENDPOINT`: GitHub API endpoint for source organization/repository
-- `TARGET_ENDPOINT`: GitHub API endpoint for target organization/repository
+- `SOURCE_PAT`: Personal Access Token for source repository (overrides GITHUB_TOKEN if set)
+- `TARGET_PAT`: Personal Access Token for target repository (overrides GITHUB_TOKEN if set)
+
+**Repository Configuration:**
+- `SOURCE_ORG`: Source organization name
+- `SOURCE_REPO`: Source repository name
+- `TARGET_ORG`: Target organization name
+- `TARGET_REPO`: Target repository name
+
+**Endpoints:**
+- `SOURCE_ENDPOINT`: GitHub API endpoint for source organization/repository (default: https://api.github.com)
+- `TARGET_ENDPOINT`: GitHub API endpoint for target organization/repository (default: https://api.github.com)
+
+**Options:**
+- `VERBOSE`: Enable verbose logging (set to any non-empty value)
+- `SKIP_ENVS`: Skip environment recreation (set to any non-empty value)
+- `ORG_TO_ORG`: Migrate only organization-level secrets (set to any non-empty value)
 
 ### Custom Endpoints (GHEC Data Residency, GHES, EMU)
 
@@ -451,41 +475,42 @@ The tool supports custom GitHub API endpoints for:
 #### Endpoint URL Formats
 
 - **Standard GitHub.com**: `https://api.github.com` (default)
-- **GHEC Data Residency (US)**: `https://us.api.github.com`
-- **GHEC Data Residency (EU)**: `https://eu.api.github.com`
+- **GHEC Data Residency**: `https://api.<INSTANCE>.ghe.com` (where `<INSTANCE>` is your organization's instance name)
 - **GitHub Enterprise Server**: `https://github.example.com/api/v3`
+
+**Data Residency Example**: If your instance is `nicklegan`, use `https://api.nicklegan.ghe.com`
 
 #### Examples
 
-**Migrate from GitHub.com to GHEC US Data Residency:**
+**Migrate from GitHub.com to GHEC Data Residency:**
 ```bash
 gh secrets-migrator \
   --source-org myorg \
   --source-repo myrepo \
   --target-org targetorg \
   --target-repo targetrepo \
-  --target-endpoint https://us.api.github.com
+  --target-endpoint https://api.yourinstance.ghe.com
 ```
 
-**Migrate from GHEC EU to GitHub.com:**
+**Migrate from GHEC Data Residency to GitHub.com:**
 ```bash
 gh secrets-migrator \
   --source-org myorg \
   --source-repo myrepo \
   --target-org targetorg \
   --target-repo targetrepo \
-  --source-endpoint https://eu.api.github.com
+  --source-endpoint https://api.yourinstance.ghe.com
 ```
 
-**Migrate between different GHEC Data Residency regions:**
+**Migrate between different GHEC Data Residency instances:**
 ```bash
 gh secrets-migrator \
   --source-org myorg \
   --source-repo myrepo \
   --target-org targetorg \
   --target-repo targetrepo \
-  --source-endpoint https://us.api.github.com \
-  --target-endpoint https://eu.api.github.com
+  --source-endpoint https://api.sourceinstance.ghe.com \
+  --target-endpoint https://api.targetinstance.ghe.com
 ```
 
 **Migrate from GitHub Enterprise Server:**
@@ -500,8 +525,8 @@ gh secrets-migrator \
 
 **Using environment variables:**
 ```bash
-export SOURCE_ENDPOINT=https://us.api.github.com
-export TARGET_ENDPOINT=https://eu.api.github.com
+export SOURCE_ENDPOINT=https://api.sourceinstance.ghe.com
+export TARGET_ENDPOINT=https://api.targetinstance.ghe.com
 
 gh secrets-migrator \
   --source-org myorg \
@@ -516,12 +541,12 @@ gh secrets-migrator \
   --source-org myorg \
   --source-repo .github \
   --target-org targetorg \
-  --source-endpoint https://us.api.github.com \
-  --target-endpoint https://eu.api.github.com \
+  --source-endpoint https://api.sourceinstance.ghe.com \
+  --target-endpoint https://api.targetinstance.ghe.com \
   --org-to-org
 ```
 
-**Note**: GHEC EMU uses the same endpoint as standard GitHub.com (`https://api.github.com`) but with organization-specific authentication and access patterns.
+**Note**: GHEC EMU (Enterprise Managed Users) can use either standard GitHub.com endpoints (`https://api.github.com`) or Data Residency endpoints (`https://api.<INSTANCE>.ghe.com`), depending on your organization's configuration.
 
 ## Security
 
@@ -726,6 +751,26 @@ Options:
   --org-to-org              Migrate only organization-level secrets
   --help                    Show help message
 ```
+
+## Dependencies
+
+The project uses the following dependencies (see `requirements.txt`):
+
+**Core Dependencies:**
+- `PyGithub==2.8.1` - GitHub API client library
+- `Click==8.3.1` - CLI framework for building command-line interfaces
+- `python-dotenv==1.2.1` - Environment variable management from .env files
+
+**Development & Build Tools:**
+- `PyInstaller==6.18.0` - Binary compilation for multi-platform distribution
+- `pytest==9.0.2` - Testing framework
+- `pytest-cov==7.0.0` - Code coverage reporting
+- `mypy==1.19.1` - Static type checking
+- `flake8==7.3.0` - Python linting
+- `bandit==1.9.3` - Security vulnerability scanner
+
+**Python Version:**
+- Requires Python 3.10 or higher (Python 3.8 and 3.9 support was dropped in v0.3.0)
 
 ## License
 
