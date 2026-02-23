@@ -200,7 +200,8 @@ def generate_org_secret_steps(
 
         # Build the step based on visibility
         if visibility == 'selected' and selected_repos:
-            # Create secret with selected visibility and add repositories
+            # Create secret with selected visibility and scoped repositories.
+            # Check which repos exist in the target org and use --repos flag.
             repos_list = ' '.join(selected_repos)
             
             # Build env section with optional GH_HOST
@@ -227,61 +228,54 @@ def generate_org_secret_steps(
           echo "Migrating organization secret: $SECRET_NAME (with repository scoping)"
           echo "=========================================="
 
-          # Create secret in target organization with selected visibility
-          if gh secret set "$SECRET_NAME" \\
-            --body "$SECRET_VALUE" \\
-            --org "$TARGET_ORG" \\
-            --visibility selected; then
-            echo "✓ Successfully created '$SECRET_NAME' in organization '$TARGET_ORG' with selected visibility"
-          else
-            echo "❌ ERROR: Failed to create secret '$SECRET_NAME' in target organization '$TARGET_ORG'"
-            exit 1
-          fi
-
-          # Add repositories to the secret scope
-          echo "Adding repositories to secret scope..."
+          # Check which source repos exist in the target org
           IFS=' ' read -r -a REPOS_ARRAY <<< "$SELECTED_REPOS"
-          SUCCESS_COUNT=0
-          FAIL_COUNT=0
+          EXISTING_REPOS=""
 
           for REPO_NAME in "${{REPOS_ARRAY[@]}}"; do
-            echo "Checking if repository $REPO_NAME exists in $TARGET_ORG..."
-
-            # Check if repo exists using gh api
             if gh api "repos/$TARGET_ORG/$REPO_NAME" >/dev/null 2>&1; then
-              echo "  Repository $REPO_NAME exists, adding to secret scope..."
-
-              # Get the repository ID
-              REPO_ID=$(gh api "repos/$TARGET_ORG/$REPO_NAME" --jq '.id')
-
-              # Add repository to secret using the GitHub API
-              if gh api \\
-                --method PUT \\
-                "orgs/$TARGET_ORG/actions/secrets/$SECRET_NAME/repositories/$REPO_ID" \\
-                >/dev/null 2>&1; then
-                echo "  ✓ Successfully added $REPO_NAME to secret scope"
-                SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+              echo "✓ Repository '$REPO_NAME' exists in target org"
+              if [ -z "$EXISTING_REPOS" ]; then
+                EXISTING_REPOS="$REPO_NAME"
               else
-                echo "  ⚠️  Failed to add $REPO_NAME to secret scope"
-                FAIL_COUNT=$((FAIL_COUNT + 1))
+                EXISTING_REPOS="$EXISTING_REPOS,$REPO_NAME"
               fi
             else
-              echo "  ⚠️  Repository $REPO_NAME does not exist in $TARGET_ORG, skipping"
-              FAIL_COUNT=$((FAIL_COUNT + 1))
+              echo "⚠️  Repository '$REPO_NAME' does not exist in target org '$TARGET_ORG', skipping"
             fi
           done
 
-          echo ""
-          echo "Summary: $SUCCESS_COUNT repositories added, $FAIL_COUNT skipped"
-
-          if [ $SUCCESS_COUNT -eq 0 ]; then
-            echo "⚠️  Warning: No repositories were added to the secret scope"
-            echo "The secret '$SECRET_NAME' was created with selected visibility but no repositories"
+          # Create/update the secret with the appropriate scope
+          if [ -n "$EXISTING_REPOS" ]; then
+            echo "Creating secret with selected visibility for repos: $EXISTING_REPOS"
+            if gh secret set "$SECRET_NAME" \\
+              --body "$SECRET_VALUE" \\
+              --org "$TARGET_ORG" \\
+              --visibility selected \\
+              --repos "$EXISTING_REPOS"; then
+              echo "✓ Successfully migrated '$SECRET_NAME' with selected visibility and repos: $EXISTING_REPOS"
+            else
+              echo "❌ ERROR: Failed to create secret '$SECRET_NAME' in target organization '$TARGET_ORG'"
+              exit 1
+            fi
+          else
+            echo "⚠️  None of the scoped repositories exist in target org, creating with selected visibility and no repos"
+            if gh secret set "$SECRET_NAME" \\
+              --body "$SECRET_VALUE" \\
+              --org "$TARGET_ORG" \\
+              --visibility selected \\
+              --no-repos-selected; then
+              echo "✓ Created '$SECRET_NAME' with selected visibility (no repositories in scope)"
+            else
+              echo "❌ ERROR: Failed to create secret '$SECRET_NAME' in target organization '$TARGET_ORG'"
+              exit 1
+            fi
           fi
         shell: bash
 """
         elif visibility == 'selected':
             # Secret has selected visibility but no repositories (edge case)
+            # Use --no-repos-selected flag to create with selected visibility and zero repos.
             # Build env section with optional GH_HOST
             env_lines = [
                 f"          TARGET_ORG: '{target_org}'",
@@ -305,11 +299,11 @@ def generate_org_secret_steps(
           echo "Migrating organization secret: $SECRET_NAME (selected visibility, no repositories)"
           echo "=========================================="
           
-          # Create secret in target organization with selected visibility but no repositories
           if gh secret set "$SECRET_NAME" \\
             --body "$SECRET_VALUE" \\
             --org "$TARGET_ORG" \\
-            --visibility selected; then
+            --visibility selected \\
+            --no-repos-selected; then
             echo "✓ Successfully migrated '$SECRET_NAME' to organization '$TARGET_ORG' with selected visibility (no repositories)"
             echo "⚠️  Note: The secret has selected visibility but no repositories in scope"
           else
@@ -470,9 +464,11 @@ def generate_workflow(
     
     # Repo-to-repo: include repository secrets step
     if not org_secrets:
-        if repo_secrets is not None:
+        if repo_secrets is not None and len(repo_secrets) > 0:
+            # Individual per-secret steps for precise migration
             migration_steps = generate_repo_secret_steps(repo_secrets, target_org, target_repo, target_endpoint)
-        else:
+        elif repo_secrets is None:
+            # Fallback: migrate all non-system secrets (old behavior, bulk approach)
             # Extract hostname from API endpoint for GH_HOST
             gh_host = extract_gh_host(target_endpoint)
             gh_env_vars = f"\n          GH_HOST: '{gh_host}'" if should_set_gh_host(target_endpoint) else ""
@@ -523,6 +519,7 @@ def generate_workflow(
           echo "✓ All secrets migrated successfully!"
         shell: bash
 """
+        # else: repo_secrets is empty list [] — no migration steps needed
     
     # Org-to-org Migration flow
     if org_secrets:

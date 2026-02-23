@@ -244,6 +244,7 @@ class TestMigratorResilienceWithRateLimitFailures:
         mock_repo = Mock()
         mock_secret = Mock()
         mock_secret.name = "MY_SECRET"
+        mock_secret.raw_data = {}
         mock_repo.get_secrets.return_value = [mock_secret]
         mock_source_github.get_repo.return_value = mock_repo
         

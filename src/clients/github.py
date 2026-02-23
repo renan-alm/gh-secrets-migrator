@@ -98,18 +98,30 @@ class GitHubClient:
             self.log.debug(f"Branch {branch_name} will be created fresh")
 
     def list_repo_secrets(self, org: str, repo: str) -> List[str]:
-        """List all repository-level secrets.
-
-        Using the /repos/{owner}/{repo}/actions/secrets endpoint which,
-        according to requirements, returns only repository-level secrets.
+        """List all repository-level secrets (excludes organization secrets).
+        
+        GitHub's repository secrets API returns both repository-level and
+        organization-level secrets that are visible to the repository.
+        This method filters out organization secrets by checking for the
+        'visibility' field in the raw API response.
         """
         try:
             repository = self.client.get_repo(f"{org}/{repo}")
+            secrets = repository.get_secrets()
+            
+            # Filter out organization secrets
+            # Org secrets have a 'visibility' field; repo secrets don't
+            result = []
+            for secret in secrets:
+                # Access raw_data to check for visibility field
+                if hasattr(secret, 'raw_data') and 'visibility' in secret.raw_data:
+                    # This is an organization secret, skip it
+                    self.log.debug(f"Skipping organization secret: {secret.name}")
+                    continue
+                result.append(secret.name)
+            
             self._log_rate_limit(f"list_repo_secrets({org}/{repo})")
-
-            # Simple iteration over secrets, assuming the API returns only repo secrets
-            # or that we want to migrate whatever this endpoint returns.
-            return [secret.name for secret in repository.get_secrets()]
+            return result
         except Exception as e:
             self.log.error(f"Failed to list secrets in {org}/{repo}: {type(e).__name__}: {e}")
             raise RuntimeError(f"Failed to list secrets in {org}/{repo}: {e}")

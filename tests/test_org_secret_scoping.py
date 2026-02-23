@@ -252,8 +252,10 @@ class TestWorkflowGenerationWithScoping:
         assert "Migrate Org Secret - SECRET_SELECTED" in workflow
         assert "SECRET_SELECTED" in workflow
         assert "--visibility selected" in workflow
-        assert "Adding repositories to secret scope" in workflow
-        assert "repo1 repo2" in workflow
+        assert "--repos" in workflow
+        assert "repo1 repo2" in workflow  # repos passed as space-separated in SELECTED_REPOS env var
+        # Should also have fallback to --no-repos-selected if none exist
+        assert "--no-repos-selected" in workflow
     
     def test_generate_org_secret_steps_with_selected_no_repos(self):
         """Test workflow generation for org secret with selected visibility but no repos."""
@@ -269,7 +271,10 @@ class TestWorkflowGenerationWithScoping:
         
         assert "Migrate Org Secret - SECRET_SELECTED_EMPTY" in workflow
         assert "--visibility selected" in workflow
+        assert "--no-repos-selected" in workflow
         assert "selected visibility, no repositories" in workflow
+        # Should NOT have repo-adding loop since there are no repos
+        assert "Adding repositories to secret scope" not in workflow
     
     def test_generate_workflow_with_org_secrets_scope(self):
         """Test full workflow generation with org secret scoping."""
@@ -298,6 +303,7 @@ class TestWorkflowGenerationWithScoping:
         assert "Migrate Org Secret - SECRET1" in workflow
         assert "Migrate Org Secret - SECRET2" in workflow
         assert "--visibility selected" in workflow  # For SECRET2
+        assert "--repos" in workflow  # For SECRET2 repo scoping
         assert "name: move-secrets" in workflow
         assert "Cleanup (Always)" in workflow
     
@@ -345,6 +351,9 @@ class TestOrgSecretScopingEdgeCases:
         
         assert "SECRET" in workflow
         assert "--visibility selected" in workflow
+        assert "--no-repos-selected" in workflow
+        # Should NOT have repo-adding loop since there are no repos
+        assert "Adding repositories to secret scope" not in workflow
     
     def test_many_selected_repositories(self):
         """Test handling of many selected repositories."""
@@ -361,6 +370,7 @@ class TestOrgSecretScopingEdgeCases:
 
         assert "SECRET" in workflow
         assert "--visibility selected" in workflow
+        assert "--repos" in workflow
         # Check that all repos are in the list
         for repo in many_repos[:5]:  # Check first few
             assert repo in workflow
