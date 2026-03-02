@@ -228,7 +228,7 @@ jobs:
           cat /tmp/release_notes.md
 
       - name: Upload release notes artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: release-notes
           path: /tmp/release_notes.md
