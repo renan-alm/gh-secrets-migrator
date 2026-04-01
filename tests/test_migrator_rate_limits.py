@@ -242,10 +242,11 @@ class TestMigratorResilienceWithRateLimitFailures:
         
         # But repo operations work
         mock_repo = Mock()
-        mock_secret = Mock()
-        mock_secret.name = "MY_SECRET"
-        mock_secret.raw_data = {}
-        mock_repo.get_secrets.return_value = [mock_secret]
+        mock_requester = Mock()
+        mock_requester.requestJsonAndCheck.return_value = ({}, {"secrets": [
+            {"name": "MY_SECRET", "created_at": "2024-01-01T00:00:00Z", "updated_at": "2024-01-01T00:00:00Z"},
+        ]})
+        mock_repo._requester = mock_requester
         mock_source_github.get_repo.return_value = mock_repo
         
         mock_github_class.side_effect = [mock_source_github, mock_target_github]

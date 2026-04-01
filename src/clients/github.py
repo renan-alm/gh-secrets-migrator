@@ -100,25 +100,39 @@ class GitHubClient:
     def list_repo_secrets(self, org: str, repo: str) -> List[str]:
         """List all repository-level secrets (excludes organization secrets).
         
-        GitHub's repository secrets API returns both repository-level and
-        organization-level secrets that are visible to the repository.
-        This method filters out organization secrets by checking for the
-        'visibility' field in the raw API response.
+        Uses the raw GitHub API directly instead of PyGithub's Secret objects
+        to avoid IncompletableObject errors that occur when the API response
+        doesn't include a URL field (common with repository-level secrets).
+        
+        Organization secrets are filtered out by checking for the 'visibility'
+        field in the raw API response.
         """
         try:
             repository = self.client.get_repo(f"{org}/{repo}")
-            secrets = repository.get_secrets()
             
-            # Filter out organization secrets
-            # Org secrets have a 'visibility' field; repo secrets don't
             result = []
-            for secret in secrets:
-                # Access raw_data to check for visibility field
-                if hasattr(secret, 'raw_data') and 'visibility' in secret.raw_data:
-                    # This is an organization secret, skip it
-                    self.log.debug(f"Skipping organization secret: {secret.name}")
-                    continue
-                result.append(secret.name)
+            page = 0
+            while True:
+                headers, data = repository._requester.requestJsonAndCheck(
+                    "GET",
+                    f"/repos/{org}/{repo}/actions/secrets",
+                    parameters={"per_page": 100, "page": page + 1},
+                )
+                secrets = data.get("secrets", [])
+                if not secrets:
+                    break
+                
+                for secret in secrets:
+                    # Org secrets have a 'visibility' field; repo secrets don't
+                    if 'visibility' in secret:
+                        self.log.debug(f"Skipping organization secret: {secret['name']}")
+                        continue
+                    result.append(secret['name'])
+                
+                # Stop if we got fewer than a full page
+                if len(secrets) < 100:
+                    break
+                page += 1
             
             self._log_rate_limit(f"list_repo_secrets({org}/{repo})")
             return result

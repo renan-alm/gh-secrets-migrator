@@ -6,15 +6,19 @@ from src.core.workflow_generator import generate_workflow
 from src.utils.logger import Logger
 
 
-class MockSecret:
-    """Mock GitHub Secret object."""
-    
-    def __init__(self, name: str, is_org_secret: bool = False):
-        self.name = name
-        self.raw_data = {}
-        if is_org_secret:
-            # Org secrets have a 'visibility' field
-            self.raw_data['visibility'] = 'selected'
+def _make_secret_dict(name: str, is_org_secret: bool = False) -> dict:
+    """Create a raw API secret dict as returned by GitHub REST API."""
+    secret = {"name": name, "created_at": "2024-01-01T00:00:00Z", "updated_at": "2024-01-01T00:00:00Z"}
+    if is_org_secret:
+        secret["visibility"] = "selected"
+    return secret
+
+
+def _mock_raw_api(mock_repo, secrets: list[dict]) -> None:
+    """Configure mock_repo._requester.requestJsonAndCheck to return secrets."""
+    mock_requester = Mock()
+    mock_requester.requestJsonAndCheck.return_value = ({}, {"secrets": secrets})
+    mock_repo._requester = mock_requester
 
 
 class TestOrgSecretFiltering:
@@ -23,34 +27,26 @@ class TestOrgSecretFiltering:
     @patch('src.clients.github.Github')
     def test_list_repo_secrets_filters_org_secrets(self, mock_github_class):
         """Test that list_repo_secrets filters out organization secrets."""
-        # Create mock client
         logger = Logger(verbose=False)
         
-        # Mock the GitHub API calls
         mock_repo = Mock()
-        mock_secrets = [
-            MockSecret("REPO_SECRET_1", is_org_secret=False),
-            MockSecret("ORG_SECRET_1", is_org_secret=True),
-            MockSecret("REPO_SECRET_2", is_org_secret=False),
-            MockSecret("ORG_SECRET_2", is_org_secret=True),
-            MockSecret("REPO_SECRET_3", is_org_secret=False),
-        ]
-        mock_repo.get_secrets.return_value = mock_secrets
+        _mock_raw_api(mock_repo, [
+            _make_secret_dict("REPO_SECRET_1"),
+            _make_secret_dict("ORG_SECRET_1", is_org_secret=True),
+            _make_secret_dict("REPO_SECRET_2"),
+            _make_secret_dict("ORG_SECRET_2", is_org_secret=True),
+            _make_secret_dict("REPO_SECRET_3"),
+        ])
         
-        # Set up the mock chain
         mock_github_instance = Mock()
         mock_github_instance.get_repo.return_value = mock_repo
         reset=datetime.fromtimestamp(datetime.now(timezone.utc).timestamp() + 3600, tz=timezone.utc)
         mock_github_instance.get_rate_limit.return_value = Mock(resources=Mock(core=Mock(remaining=5000, limit=5000, reset=reset)))
         mock_github_class.return_value = mock_github_instance
         
-        # Create client (will use mocked Github)
         client = GitHubClient("fake-token", logger)
-        
-        # Call the method
         result = client.list_repo_secrets("test-org", "test-repo")
         
-        # Verify only repository secrets are returned
         assert len(result) == 3
         assert "REPO_SECRET_1" in result
         assert "REPO_SECRET_2" in result
@@ -64,12 +60,11 @@ class TestOrgSecretFiltering:
         logger = Logger(verbose=False)
         
         mock_repo = Mock()
-        mock_secrets = [
-            MockSecret("REPO_SECRET_1", is_org_secret=False),
-            MockSecret("REPO_SECRET_2", is_org_secret=False),
-            MockSecret("REPO_SECRET_3", is_org_secret=False),
-        ]
-        mock_repo.get_secrets.return_value = mock_secrets
+        _mock_raw_api(mock_repo, [
+            _make_secret_dict("REPO_SECRET_1"),
+            _make_secret_dict("REPO_SECRET_2"),
+            _make_secret_dict("REPO_SECRET_3"),
+        ])
         
         mock_github_instance = Mock()
         mock_github_instance.get_repo.return_value = mock_repo
@@ -91,11 +86,10 @@ class TestOrgSecretFiltering:
         logger = Logger(verbose=False)
         
         mock_repo = Mock()
-        mock_secrets = [
-            MockSecret("ORG_SECRET_1", is_org_secret=True),
-            MockSecret("ORG_SECRET_2", is_org_secret=True),
-        ]
-        mock_repo.get_secrets.return_value = mock_secrets
+        _mock_raw_api(mock_repo, [
+            _make_secret_dict("ORG_SECRET_1", is_org_secret=True),
+            _make_secret_dict("ORG_SECRET_2", is_org_secret=True),
+        ])
         
         mock_github_instance = Mock()
         mock_github_instance.get_repo.return_value = mock_repo
@@ -115,7 +109,7 @@ class TestOrgSecretFiltering:
         logger = Logger(verbose=False)
         
         mock_repo = Mock()
-        mock_repo.get_secrets.return_value = []
+        _mock_raw_api(mock_repo, [])
         
         mock_github_instance = Mock()
         mock_github_instance.get_repo.return_value = mock_repo
@@ -237,12 +231,10 @@ class TestRepoSecretEdgeCases:
         logger = Logger(verbose=False)
         
         mock_repo = Mock()
-        # Simulate: API returns an org secret and a repo secret
-        mock_secrets = [
-            MockSecret("ORG_SECRET", is_org_secret=True),
-            MockSecret("REPO_ONLY", is_org_secret=False),
-        ]
-        mock_repo.get_secrets.return_value = mock_secrets
+        _mock_raw_api(mock_repo, [
+            _make_secret_dict("ORG_SECRET", is_org_secret=True),
+            _make_secret_dict("REPO_ONLY"),
+        ])
         
         mock_github_instance = Mock()
         mock_github_instance.get_repo.return_value = mock_repo
@@ -263,12 +255,11 @@ class TestRepoSecretEdgeCases:
         logger = Logger(verbose=False)
         
         mock_repo = Mock()
-        mock_secrets = [
-            MockSecret("SECRET_WITH_UNDERSCORES", is_org_secret=False),
-            MockSecret("SECRET-WITH-DASHES", is_org_secret=False),
-            MockSecret("SECRET123", is_org_secret=False),
-        ]
-        mock_repo.get_secrets.return_value = mock_secrets
+        _mock_raw_api(mock_repo, [
+            _make_secret_dict("SECRET_WITH_UNDERSCORES"),
+            _make_secret_dict("SECRET-WITH-DASHES"),
+            _make_secret_dict("SECRET123"),
+        ])
         
         mock_github_instance = Mock()
         mock_github_instance.get_repo.return_value = mock_repo
@@ -283,3 +274,77 @@ class TestRepoSecretEdgeCases:
         assert "SECRET_WITH_UNDERSCORES" in result
         assert "SECRET-WITH-DASHES" in result
         assert "SECRET123" in result
+
+
+class TestIncompletableObjectHandling:
+    """Regression tests for PyGithub IncompletableObject error.
+
+    PyGithub 2.9.0's Secret class extends CompletableGithubObject. When the
+    GitHub API response for repository secrets doesn't include a URL field,
+    accessing properties like .name or .raw_data triggers lazy-loading which
+    raises IncompletableObject(400).
+
+    The fix uses raw API calls (requestJsonAndCheck) instead of PyGithub's
+    Secret objects, completely bypassing the lazy-loading mechanism.
+
+    These tests verify the fix works for the error reported in:
+    https://github.com/renan-alm/gh-secrets-migrator/issues (IncompletableObject error)
+    """
+
+    @patch('src.clients.github.Github')
+    def test_list_repo_secrets_succeeds_with_raw_api(self, mock_github_class):
+        """Test that list_repo_secrets works by using raw API calls.
+
+        The raw API approach avoids PyGithub's Secret objects entirely,
+        preventing IncompletableObject errors.
+        """
+        logger = Logger(verbose=False)
+
+        mock_repo = Mock()
+        _mock_raw_api(mock_repo, [
+            _make_secret_dict("SECRET_1"),
+            _make_secret_dict("SECRET_2"),
+        ])
+
+        mock_github_instance = Mock()
+        mock_github_instance.get_repo.return_value = mock_repo
+        reset = datetime.fromtimestamp(datetime.now(timezone.utc).timestamp() + 3600, tz=timezone.utc)
+        mock_github_instance.get_rate_limit.return_value = Mock(resources=Mock(core=Mock(remaining=5000, limit=5000, reset=reset)))
+        mock_github_class.return_value = mock_github_instance
+
+        client = GitHubClient("fake-token", logger)
+        result = client.list_repo_secrets("Test-migration-repos", "test-mg-4")
+
+        assert len(result) == 2
+        assert "SECRET_1" in result
+        assert "SECRET_2" in result
+
+    @patch('src.clients.github.Github')
+    def test_list_repo_secrets_filters_org_secrets_with_raw_api(self, mock_github_class):
+        """Test that org secret filtering works correctly with raw API.
+
+        Verifies that the raw API approach still correctly filters out
+        organization secrets based on the 'visibility' field.
+        """
+        logger = Logger(verbose=False)
+
+        mock_repo = Mock()
+        _mock_raw_api(mock_repo, [
+            _make_secret_dict("GOOD_SECRET_1"),
+            _make_secret_dict("ORG_SECRET", is_org_secret=True),
+            _make_secret_dict("GOOD_SECRET_2"),
+        ])
+
+        mock_github_instance = Mock()
+        mock_github_instance.get_repo.return_value = mock_repo
+        reset = datetime.fromtimestamp(datetime.now(timezone.utc).timestamp() + 3600, tz=timezone.utc)
+        mock_github_instance.get_rate_limit.return_value = Mock(resources=Mock(core=Mock(remaining=5000, limit=5000, reset=reset)))
+        mock_github_class.return_value = mock_github_instance
+
+        client = GitHubClient("fake-token", logger)
+        result = client.list_repo_secrets("Test-migration-repos", "test-mg-4")
+
+        assert len(result) == 2
+        assert "GOOD_SECRET_1" in result
+        assert "GOOD_SECRET_2" in result
+        assert "ORG_SECRET" not in result
