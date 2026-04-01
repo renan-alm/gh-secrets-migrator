@@ -1,7 +1,6 @@
 """Tests for organization secret filtering during repo-to-repo migration."""
 from datetime import datetime, timezone
 from unittest.mock import Mock, patch
-import pytest
 from src.clients.github import GitHubClient
 from src.core.workflow_generator import generate_workflow
 from src.utils.logger import Logger
