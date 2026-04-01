@@ -288,7 +288,7 @@ class TestIncompletableObjectHandling:
     Secret objects, completely bypassing the lazy-loading mechanism.
 
     These tests verify the fix works for the error reported in:
-    https://github.com/renan-alm/gh-secrets-migrator/issues (IncompleteObject error)
+    https://github.com/renan-alm/gh-secrets-migrator/issues (IncompletableObject error)
     """
 
     @patch('src.clients.github.Github')
