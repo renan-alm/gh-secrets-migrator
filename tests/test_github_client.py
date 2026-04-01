@@ -261,16 +261,14 @@ class TestMigrationResilienceWithRateLimitFailures:
         self, github_client_with_failing_rate_limit
     ):
         """Test that list_repo_secrets works even when rate limit API fails."""
-        # Setup mock repo with secrets
-        mock_secret1 = Mock()
-        mock_secret1.name = "SECRET_1"
-        mock_secret1.raw_data = {}
-        mock_secret2 = Mock()
-        mock_secret2.name = "SECRET_2"
-        mock_secret2.raw_data = {}
-        
+        # Setup mock repo with raw API response
         mock_repo = Mock()
-        mock_repo.get_secrets.return_value = [mock_secret1, mock_secret2]
+        mock_requester = Mock()
+        mock_requester.requestJsonAndCheck.return_value = ({}, {"secrets": [
+            {"name": "SECRET_1", "created_at": "2024-01-01T00:00:00Z", "updated_at": "2024-01-01T00:00:00Z"},
+            {"name": "SECRET_2", "created_at": "2024-01-01T00:00:00Z", "updated_at": "2024-01-01T00:00:00Z"},
+        ]})
+        mock_repo._requester = mock_requester
         github_client_with_failing_rate_limit.client.get_repo.return_value = mock_repo
 
         # Execute
