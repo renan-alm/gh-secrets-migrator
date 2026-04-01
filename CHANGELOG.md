@@ -6,6 +6,12 @@ This changelog is auto-generated from [Conventional Commits](https://www.convent
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.3.0] - 2026-01-21
+## [1.0.0] - 2026-04-01
+
+### Fixed
+
+- Using raw API for fetching secrets to avoid bug from PyGitHub lib (#83) (4a9b6b5)
+
 ## [0.9.0] - 2026-02-23
 
 ### Added
