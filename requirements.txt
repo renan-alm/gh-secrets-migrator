@@ -1,6 +1,6 @@
 PyGithub==2.9.0
 python-dotenv==1.2.2
-click==8.3.1
+click==8.3.2
 pytest==9.0.2
 pytest-cov==7.1.0
 mypy==1.19.1
