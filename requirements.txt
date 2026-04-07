@@ -1,4 +1,5 @@
 PyGithub==2.9.0
+PyNaCl==1.6.2
 python-dotenv==1.2.2
 click==8.3.1
 pytest==9.0.2

@@ -1,7 +1,9 @@
 """GitHub API client wrapper."""
 # flake8: noqa: E501
+from base64 import b64encode
 from typing import List, Dict, Any
 from github import Github, UnknownObjectException
+from nacl import encoding, public
 from src.utils.logger import Logger
 
 
@@ -13,6 +15,20 @@ class GitHubClient:
         self.client = Github(pat, base_url=base_url)
         self.log = logger
         self.base_url = base_url
+    @staticmethod
+    def _encrypt_secret(public_key: str, secret_value: str) -> str:
+        """Encrypt a secret value using LibSodium sealed box.
+
+        Per GitHub API docs, secrets must be encrypted with the repository/org
+        public key before being sent to the API.
+
+        See: https://docs.github.com/en/rest/guides/encrypting-secrets-for-the-rest-api
+        """
+        pk = public.PublicKey(public_key.encode("utf-8"), encoding.Base64Encoder())
+        sealed_box = public.SealedBox(pk)
+        encrypted = sealed_box.encrypt(secret_value.encode("utf-8"))
+        return b64encode(encrypted).decode("utf-8")
+
     def get_rate_limit_info(self) -> dict:
         """Get current rate limit information.
 
@@ -141,11 +157,35 @@ class GitHubClient:
             raise RuntimeError(f"Failed to list secrets in {org}/{repo}: {e}")
 
     def create_repo_secret(self, org: str, repo: str, secret_name: str, secret_value: str) -> None:
-        """Create or update a secret in the repository."""
+        """Create or update a secret in the repository.
+
+        Follows the GitHub REST API docs:
+        1. GET /repos/{owner}/{repo}/actions/secrets/public-key
+        2. Encrypt the value with LibSodium using the public key
+        3. PUT /repos/{owner}/{repo}/actions/secrets/{secret_name}
+
+        See: https://docs.github.com/en/rest/actions/secrets#create-or-update-a-repository-secret
+        """
         try:
             repository = self.client.get_repo(f"{org}/{repo}")
-            # PyGithub handles encryption automatically!
-            repository.create_secret(secret_name, secret_value)
+
+            # Step 1: Get the repository public key
+            _, key_data = repository._requester.requestJsonAndCheck(
+                "GET", f"/repos/{org}/{repo}/actions/secrets/public-key"
+            )
+            public_key = key_data["key"]
+            key_id = key_data["key_id"]
+
+            # Step 2: Encrypt the secret value
+            encrypted_value = self._encrypt_secret(public_key, secret_value)
+
+            # Step 3: Create or update the secret
+            repository._requester.requestJsonAndCheck(
+                "PUT",
+                f"/repos/{org}/{repo}/actions/secrets/{secret_name}",
+                input={"encrypted_value": encrypted_value, "key_id": key_id},
+            )
+
             self._log_rate_limit(f"create_repo_secret({org}/{repo}/{secret_name})")
             self.log.debug(f"Created/updated secret {secret_name} in {org}/{repo}")
         except Exception as e:
@@ -163,16 +203,31 @@ class GitHubClient:
             raise RuntimeError(f"Failed to delete secret {secret_name} from {org}/{repo}: {e}")
 
     def create_file(self, org: str, repo: str, branch: str, path: str, contents: str) -> None:
-        """Create or update a file in the repository."""
+        """Create or update a file in the repository.
+
+        If the file already exists on the branch, it is updated with the
+        required SHA so the API does not return a 422 error.
+        """
         try:
             repository = self.client.get_repo(f"{org}/{repo}")
-            repository.create_file(
-                path=path,
-                message=f"Add {path}",
-                content=contents,
-                branch=branch
-            )
-            self.log.debug(f"Created file {path} on branch {branch}")
+            try:
+                existing = repository.get_contents(path, ref=branch)
+                repository.update_file(
+                    path=path,
+                    message=f"Update {path}",
+                    content=contents,
+                    sha=existing.sha,
+                    branch=branch,
+                )
+                self.log.debug(f"Updated existing file {path} on branch {branch}")
+            except UnknownObjectException:
+                repository.create_file(
+                    path=path,
+                    message=f"Add {path}",
+                    content=contents,
+                    branch=branch,
+                )
+                self.log.debug(f"Created file {path} on branch {branch}")
         except Exception as e:
             raise RuntimeError(f"Failed to create file {path} in {org}/{repo} on branch {branch}: {e}")
 
@@ -315,18 +370,46 @@ class GitHubClient:
             self.log.debug(f"Failed to list organization secrets in {org}")
             raise RuntimeError(f"Failed to list organization secrets in {org}")
 
-    def create_org_secret(self, org: str, secret_name: str, secret_value: str) -> None:
+    def create_org_secret(self, org: str, secret_name: str, secret_value: str, visibility: str = "all") -> None:
         """Create or update a secret in the organization.
+
+        Follows the GitHub REST API docs:
+        1. GET /orgs/{org}/actions/secrets/public-key
+        2. Encrypt the value with LibSodium using the public key
+        3. PUT /orgs/{org}/actions/secrets/{secret_name}
 
         Args:
             org: Organization name
             secret_name: Name of the secret
             secret_value: Value of the secret
+            visibility: Secret visibility ('all', 'private', or 'selected')
+
+        See: https://docs.github.com/en/rest/actions/secrets#create-or-update-an-organization-secret
         """
         try:
             organization = self.client.get_organization(org)
-            # PyGithub handles encryption automatically
-            organization.create_secret(secret_name, secret_value)
+
+            # Step 1: Get the organization public key
+            _, key_data = organization._requester.requestJsonAndCheck(
+                "GET", f"/orgs/{org}/actions/secrets/public-key"
+            )
+            public_key = key_data["key"]
+            key_id = key_data["key_id"]
+
+            # Step 2: Encrypt the secret value
+            encrypted_value = self._encrypt_secret(public_key, secret_value)
+
+            # Step 3: Create or update the secret
+            organization._requester.requestJsonAndCheck(
+                "PUT",
+                f"/orgs/{org}/actions/secrets/{secret_name}",
+                input={
+                    "encrypted_value": encrypted_value,
+                    "key_id": key_id,
+                    "visibility": visibility,
+                },
+            )
+
             self._log_rate_limit(f"create_org_secret({org}/{secret_name})")
             self.log.debug(f"Created/updated organization secret {secret_name} in {org}")
         except Exception as e:
