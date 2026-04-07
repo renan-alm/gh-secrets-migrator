@@ -6,6 +6,12 @@ This changelog is auto-generated from [Conventional Commits](https://www.convent
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.3.0] - 2026-01-21
+## [1.0.1] - 2026-04-07
+
+### Fixed
+
+- encrypt secrets with LibSodium before sending to GitHub API (#86) (5e1de5b)
+
 ## [1.0.0] - 2026-04-01
 
 ### Fixed
