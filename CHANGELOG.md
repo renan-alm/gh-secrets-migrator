@@ -6,6 +6,16 @@ This changelog is auto-generated from [Conventional Commits](https://www.convent
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.3.0] - 2026-01-21
+## [1.0.2] - 2026-04-08
+
+### Added
+
+- Return commit SHA for created/updated file (#89) (f3a1e89)
+
+### Fixed
+
+- env secrets generate separate workflow jobs per environment for … (#88) (b89a25e)
+
 ## [1.0.2-rc] - 2026-04-08
 
 ### Fixed
