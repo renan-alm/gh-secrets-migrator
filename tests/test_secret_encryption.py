@@ -296,6 +296,8 @@ class TestCreateFile:
         """When file does not exist, call create_file on the repo."""
         mock_repo = Mock()
         mock_repo.get_contents.side_effect = UnknownObjectException(404, "Not Found", None)
+        mock_commit = Mock(sha="abc123")
+        mock_repo.create_file.return_value = {"commit": mock_commit}
         github_client.client.get_repo.return_value = mock_repo
 
         github_client.create_file("org", "repo", "feature-branch", ".github/workflows/ci.yml", "content: true")
@@ -314,6 +316,8 @@ class TestCreateFile:
         mock_existing = Mock()
         mock_existing.sha = "abc123deadbeef"
         mock_repo.get_contents.return_value = mock_existing
+        mock_commit = Mock(sha="def456")
+        mock_repo.update_file.return_value = {"commit": mock_commit}
         github_client.client.get_repo.return_value = mock_repo
 
         github_client.create_file("org", "repo", "migrate-secrets", ".github/workflows/migrate.yml", "new-content")
