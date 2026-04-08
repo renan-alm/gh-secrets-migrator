@@ -131,12 +131,13 @@ class Migrator:
                 
                 self.log.success("Resuming migration...")
 
-    def _get_workflow_run_url(self, branch_name: str, workflow_name: str = "migrate-secrets.yml") -> str:
+    def _get_workflow_run_url(self, branch_name: str, workflow_name: str = "migrate-secrets.yml", head_sha: str = "") -> str:
         """Get the URL of the workflow run triggered by the push to the migration branch.
         
         Args:
             branch_name: The branch that triggered the workflow
             workflow_name: The workflow file name (default: migrate-secrets.yml)
+            head_sha: If provided, only match runs triggered by this commit SHA
         """
         try:
             repo = self.source_api.client.get_repo(
@@ -162,6 +163,8 @@ class Migrator:
                 try:
                     runs = workflow.get_runs(branch=branch_name, status=status)
                     for run in runs:
+                        if head_sha and run.head_sha != head_sha:
+                            continue
                         self.log.debug(f"Found workflow run {run.id} with status {status}")
                         # Derive web host from source endpoint
                         web_host = derive_web_host(self.config.source_endpoint)
@@ -680,7 +683,7 @@ class Migrator:
             target_endpoint=self.config.target_endpoint
         )
         self.log.debug("Creating workflow file...")
-        self.source_api.create_file(
+        workflow_commit_sha = self.source_api.create_file(
             self.config.source_org,
             self.config.source_repo,
             branch_name,
@@ -692,10 +695,12 @@ class Migrator:
         self.log.debug("Waiting for workflow to be triggered...")
         
         workflow_run_url = ""
-        max_retries = 6
+        max_retries = 10
         for attempt in range(max_retries):
             time.sleep(2 if attempt == 0 else 3)  # Initial 2s, then 3s between retries
-            workflow_run_url = self._get_workflow_run_url(branch_name)
+            if attempt == 2:
+                self.log.info("Fetching workflow run id ...")
+            workflow_run_url = self._get_workflow_run_url(branch_name, head_sha=workflow_commit_sha)
             if workflow_run_url:
                 self.log.debug(f"Found workflow run URL on attempt {attempt + 1}")
                 break
@@ -708,13 +713,8 @@ class Migrator:
                 f"View progress: {workflow_run_url}"
             )
         else:
-            # Fallback to generic actions page if we can't get the specific run
-            self.log.debug("Could not find specific workflow run, using generic actions URL")
-            # Derive web host from source endpoint
-            web_host = derive_web_host(self.config.source_endpoint)
-            self.log.success(
-                f"Secrets migration workflow triggered!\n"
-                f"View progress: {web_host}/{self.config.source_org}/{self.config.source_repo}/actions?query=branch%3Amigrate-secrets"
+            self.log.info(
+                "Could not retrieve the workflow run URL. Check the Actions tab in the source repository for progress."
             )
         
         self._check_rate_limits("migration_complete")
