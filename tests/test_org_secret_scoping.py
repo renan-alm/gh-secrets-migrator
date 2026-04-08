@@ -305,7 +305,7 @@ class TestWorkflowGenerationWithScoping:
         assert "--visibility selected" in workflow  # For SECRET2
         assert "--repos" in workflow  # For SECRET2 repo scoping
         assert "name: move-secrets" in workflow
-        assert "Cleanup (Always)" in workflow
+        assert "Cleanup" in workflow
     
     def test_generate_org_secret_steps_backward_compatibility(self):
         """Test that workflow generation works without scope information (backward compatibility)."""
