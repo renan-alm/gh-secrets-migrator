@@ -2,7 +2,7 @@ PyGithub==2.9.0
 PyNaCl==1.6.2
 python-dotenv==1.2.2
 click==8.3.2
-pytest==9.0.2
+pytest==9.0.3
 pytest-cov==7.1.0
 mypy==1.20.0
 flake8==7.3.0
