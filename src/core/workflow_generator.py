@@ -1,4 +1,5 @@
 """Workflow generation for secrets migration."""
+import re
 from typing import Dict, List, Optional, Any
 from urllib.parse import urlparse
 # flake8: noqa: E501
@@ -93,30 +94,30 @@ def derive_web_host(api_endpoint: str) -> str:
     return f"{parsed.scheme}://{parsed.netloc}"
 
 
+def sanitize_job_id(name: str) -> str:
+    """Sanitize an environment name into a valid GitHub Actions job ID.
+
+    Job IDs must match [a-zA-Z_][a-zA-Z0-9_-]*.
+    """
+    sanitized = re.sub(r'[^a-zA-Z0-9_-]', '-', name)
+    if not sanitized or not sanitized[0].isalpha() and sanitized[0] != '_':
+        sanitized = '_' + sanitized
+    return sanitized
+
+
 def generate_environment_secret_steps(env_secrets: Dict[str, List[str]], source_org: str, source_repo: str, target_org: str, target_repo: str, target_endpoint: str = DEFAULT_GITHUB_ENDPOINT) -> str:
     """Generate workflow steps for each environment secret.
-    
-    Args:
-        env_secrets: Dict mapping environment names to lists of secret names
-                     Example: {'production': ['DB_PASSWORD', 'API_KEY'], 'staging': ['DB_PASSWORD']}
-        source_org: Source organization
-        source_repo: Source repository
-        target_org: Target organization
-        target_repo: Target repository
-        target_endpoint: Target GitHub API endpoint (default: https://api.github.com)
-        
-    Returns:
-        String containing all the generated workflow steps
+
+    Returns steps YAML (used internally by generate_environment_secret_jobs and kept
+    for backward compatibility with tests that call it directly).
     """
     steps = []
-    
-    # Extract hostname from API endpoint for GH_HOST
+
     gh_host = extract_gh_host(target_endpoint)
     gh_env_vars = f"GH_HOST: '{gh_host}'" if should_set_gh_host(target_endpoint) else ""
-    
+
     for env_name, secret_names in env_secrets.items():
         for secret_name in secret_names:
-            # Build env section with optional GH_HOST
             env_lines = [
                 f"          TARGET_ORG: '{target_org}'",
                 f"          TARGET_REPO: '{target_repo}'",
@@ -127,9 +128,9 @@ def generate_environment_secret_steps(env_secrets: Dict[str, List[str]], source_
             ]
             if gh_env_vars:
                 env_lines.append(f"          {gh_env_vars}")
-            
+
             env_section = "\n".join(env_lines)
-            
+
             step = f"""      - name: Migrate {env_name} - {secret_name}
         env:
 {env_section}
@@ -154,8 +155,108 @@ def generate_environment_secret_steps(env_secrets: Dict[str, List[str]], source_
         shell: bash
 """
             steps.append(step)
-    
+
     return "\n".join(steps)
+
+
+def generate_environment_secret_jobs(
+    env_secrets: Dict[str, List[str]],
+    source_org: str,
+    source_repo: str,
+    target_org: str,
+    target_repo: str,
+    target_endpoint: str = DEFAULT_GITHUB_ENDPOINT,
+    batch_size: int = 5,
+) -> tuple:
+    """Generate separate workflow jobs for each environment's secrets, batched.
+
+    Each environment gets its own job with the ``environment:`` key so that
+    GitHub Actions can resolve environment-scoped secrets.
+    Jobs are batched: up to *batch_size* jobs run in parallel per batch.
+
+    Returns:
+        Tuple of (jobs_yaml, last_batch_job_ids)
+    """
+    if not env_secrets:
+        return ("", [])
+
+    gh_host = extract_gh_host(target_endpoint)
+    gh_env_vars = f"GH_HOST: '{gh_host}'" if should_set_gh_host(target_endpoint) else ""
+
+    # Build list of (job_id, env_name) pairs
+    env_list = []
+    for env_name in env_secrets:
+        job_id = f"migrate-env-{sanitize_job_id(env_name)}"
+        env_list.append((job_id, env_name))
+
+    # Split into batches
+    batches = []
+    for i in range(0, len(env_list), batch_size):
+        batches.append(env_list[i:i + batch_size])
+
+    jobs = []
+    prev_batch_ids = ["migrate-repo-secrets"]
+
+    for batch in batches:
+        current_batch_ids = []
+        needs_str = ", ".join(prev_batch_ids)
+
+        for job_id, env_name in batch:
+            current_batch_ids.append(job_id)
+            secret_names = env_secrets[env_name]
+
+            steps_parts = []
+            for secret_name in secret_names:
+                env_lines = [
+                    f"          TARGET_ORG: '{target_org}'",
+                    f"          TARGET_REPO: '{target_repo}'",
+                    f"          ENVIRONMENT: '{env_name}'",
+                    f"          SECRET_NAME: '{secret_name}'",
+                    f"          SECRET_VALUE: ${{{{ secrets.{secret_name} }}}}",
+                    f"          GH_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_TARGET_PAT }}}}"
+                ]
+                if gh_env_vars:
+                    env_lines.append(f"          {gh_env_vars}")
+
+                env_section = "\n".join(env_lines)
+
+                step = f"""      - name: Migrate {env_name} - {secret_name}
+        env:
+{env_section}
+        run: |
+          #!/bin/bash
+          set -e
+
+          echo "=========================================="
+          echo "Migrating environment secret: $ENVIRONMENT - $SECRET_NAME"
+          echo "=========================================="
+          
+          if gh secret set "$SECRET_NAME" \\
+            --body "$SECRET_VALUE" \\
+            --repo "$TARGET_ORG/$TARGET_REPO" \\
+            --env "$ENVIRONMENT"; then
+            echo "✓ Successfully migrated '$SECRET_NAME' to $ENVIRONMENT"
+          else
+            echo "❌ ERROR: Failed to create secret '$SECRET_NAME' in target environment '$ENVIRONMENT'"
+            exit 1
+          fi
+        shell: bash"""
+                steps_parts.append(step)
+
+            steps_yaml = "\n".join(steps_parts)
+
+            job = f"""  {job_id}:
+    runs-on: ubuntu-latest
+    needs: [{needs_str}]
+    environment: {env_name}
+    steps:
+{steps_yaml}
+"""
+            jobs.append(job)
+
+        prev_batch_ids = current_batch_ids
+
+    return ("\n".join(jobs), prev_batch_ids)
 
 
 def generate_org_secret_steps(
@@ -529,17 +630,23 @@ def generate_workflow(
             org_secrets_scope=org_secrets_scope,
             target_endpoint=target_endpoint
         )
-        env_steps = ""
-    else:
-        # Environment secrets only for repo-to-repo migrations
-        env_steps = ""
-        if env_secrets:
-            env_steps = generate_environment_secret_steps(env_secrets, source_org, source_repo, target_org, target_repo, target_endpoint)
-    
+
+    # Generate environment secret jobs (repo-to-repo only)
+    env_jobs_yaml = ""
+    cleanup_needs_ids = ["migrate-repo-secrets"]
+    if not org_secrets and env_secrets:
+        env_jobs_yaml, last_batch_ids = generate_environment_secret_jobs(
+            env_secrets, source_org, source_repo, target_org, target_repo, target_endpoint
+        )
+        if last_batch_ids:
+            cleanup_needs_ids = last_batch_ids
+
     # Extract hostname from API endpoint for GH_HOST (for cleanup step)
     gh_host_source = extract_gh_host(source_endpoint)
     gh_env_vars_cleanup = f"\n          GH_HOST: '{gh_host_source}'" if should_set_gh_host(source_endpoint) else ""
-    
+
+    cleanup_needs_str = ", ".join(cleanup_needs_ids)
+
     workflow = f"""name: move-secrets
 on:
   push:
@@ -552,10 +659,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 {migration_steps}
-{env_steps if env_steps else '      # No environment secrets to migrate'}
+      - name: Repo secrets complete
+        run: echo "Repository secret migration steps finished."
+        shell: bash
 
-      - name: Cleanup (Always)
-        if: always()
+{env_jobs_yaml if env_jobs_yaml else '  # No environment secrets to migrate'}
+
+  cleanup:
+    runs-on: ubuntu-latest
+    needs: [{cleanup_needs_str}]
+    if: always()
+    steps:
+      - name: Cleanup
         env:
           GH_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_SOURCE_PAT }}}}
           GITHUB_TOKEN: ${{{{ secrets.SECRETS_MIGRATOR_SOURCE_PAT }}}}{gh_env_vars_cleanup}

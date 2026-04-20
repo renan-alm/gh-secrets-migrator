@@ -1,7 +1,7 @@
 """Advanced tests for edge cases and error handling."""
 import pytest
 from src.core.config import MigrationConfig
-from src.core.workflow_generator import generate_workflow, generate_environment_secret_steps
+from src.core.workflow_generator import generate_workflow, generate_environment_secret_steps, generate_environment_secret_jobs
 
 
 class TestConfigEdgeCases:
@@ -82,11 +82,13 @@ class TestWorkflowGeneratorEdgeCases:
         env_secrets = {
             f"env_{i}": [f"SECRET_{j}" for j in range(5)] for i in range(10)
         }
-        steps = generate_environment_secret_steps(
+        jobs_yaml, last_ids = generate_environment_secret_jobs(
             env_secrets, "org", "repo", "target", "target"
         )
         # Should have 50 secret migrations (10 envs × 5 secrets)
-        assert steps.count("Migrate") == 50
+        assert jobs_yaml.count("Migrate") == 50
+        # 10 envs at batch_size=5 → 2 batches, last batch has 5
+        assert len(last_ids) == 5
 
     def test_workflow_with_numeric_environment_names(self):
         """Test workflow with numeric environment names."""
@@ -94,8 +96,11 @@ class TestWorkflowGeneratorEdgeCases:
         workflow = generate_workflow(
             "org", "repo", "target", "target", "branch", env_secrets=env_secrets
         )
-        assert "1" in workflow
-        assert "2" in workflow
+        assert "environment: 1" in workflow
+        assert "environment: 2" in workflow
+        # Numeric names should produce valid job IDs (prefixed with _)
+        assert "migrate-env-_1" in workflow
+        assert "migrate-env-_2" in workflow
 
     def test_workflow_branch_name_with_special_chars(self):
         """Test workflow generation with special branch names."""
@@ -149,12 +154,12 @@ class TestWorkflowGeneratorShellScripts:
     def test_workflow_has_proper_quoting(self):
         """Test that workflow uses proper shell quoting."""
         env_secrets = {"prod": ["DB_PASSWORD"]}
-        steps = generate_environment_secret_steps(
+        jobs_yaml, _ = generate_environment_secret_jobs(
             env_secrets, "org", "repo", "target", "target"
         )
         # Check for proper variable quoting
-        assert "$" in steps  # Uses variables
-        assert "\\" in steps  # Uses escaping
+        assert "$" in jobs_yaml  # Uses variables
+        assert "\\" in jobs_yaml  # Uses escaping
 
     def test_workflow_sets_environment_variables(self):
         """Test that workflow sets required environment variables."""

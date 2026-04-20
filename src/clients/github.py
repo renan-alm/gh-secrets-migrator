@@ -202,17 +202,19 @@ class GitHubClient:
         except Exception as e:
             raise RuntimeError(f"Failed to delete secret {secret_name} from {org}/{repo}: {e}")
 
-    def create_file(self, org: str, repo: str, branch: str, path: str, contents: str) -> None:
+    def create_file(self, org: str, repo: str, branch: str, path: str, contents: str) -> str:
         """Create or update a file in the repository.
 
         If the file already exists on the branch, it is updated with the
         required SHA so the API does not return a 422 error.
+
+        Returns the commit SHA of the created/updated file.
         """
         try:
             repository = self.client.get_repo(f"{org}/{repo}")
             try:
                 existing = repository.get_contents(path, ref=branch)
-                repository.update_file(
+                result = repository.update_file(
                     path=path,
                     message=f"Update {path}",
                     content=contents,
@@ -221,13 +223,14 @@ class GitHubClient:
                 )
                 self.log.debug(f"Updated existing file {path} on branch {branch}")
             except UnknownObjectException:
-                repository.create_file(
+                result = repository.create_file(
                     path=path,
                     message=f"Add {path}",
                     content=contents,
                     branch=branch,
                 )
                 self.log.debug(f"Created file {path} on branch {branch}")
+            return result["commit"].sha
         except Exception as e:
             raise RuntimeError(f"Failed to create file {path} in {org}/{repo} on branch {branch}: {e}")
 

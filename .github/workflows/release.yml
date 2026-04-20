@@ -247,7 +247,7 @@ jobs:
           fi
 
       - name: Verify tests passed on master
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const runs = await github.rest.actions.listWorkflowRuns({
