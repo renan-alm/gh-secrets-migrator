@@ -7,6 +7,8 @@
 
 A GitHub CLI extension to migrate GitHub repository secrets from a source repository to a target repository using GitHub Actions workflows. Written in Python and compiled to native binaries using PyInstaller.
 
+If you are curious, try out also [GitHub Vars Migrator](https://github.com/renan-alm/gh-vars-migrator) - a companion tool for migrating GitHub repository variables!
+
 ## Features
 
 - ✨ Migrates secrets from one GitHub repository to another
