@@ -493,7 +493,8 @@ class Migrator:
                 org_secrets=list(secrets_to_migrate.keys()),
                 org_secrets_scope=org_secrets_scope_for_target,
                 source_endpoint=self.config.source_endpoint,
-                target_endpoint=self.config.target_endpoint
+                target_endpoint=self.config.target_endpoint,
+                skip_overwrite=self.config.skip_overwrite,
             )
             
             # Step 3: Create migration branch and push workflow
@@ -680,7 +681,8 @@ class Migrator:
             env_secrets=env_secrets_info,
             repo_secrets=secrets_to_migrate,
             source_endpoint=self.config.source_endpoint,
-            target_endpoint=self.config.target_endpoint
+            target_endpoint=self.config.target_endpoint,
+            skip_overwrite=self.config.skip_overwrite,
         )
         self.log.debug("Creating workflow file...")
         workflow_commit_sha = self.source_api.create_file(

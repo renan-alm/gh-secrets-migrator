@@ -21,6 +21,7 @@ class TestMigrationConfig:
         assert config.target_repo == "target-repo"
         assert config.org_to_org is False
         assert config.skip_envs is False
+        assert config.skip_overwrite is False
 
     def test_config_org_to_org(self):
         """Test org-to-org configuration."""
@@ -49,6 +50,19 @@ class TestMigrationConfig:
         )
         assert config.skip_envs is True
 
+    def test_config_skip_overwrite(self):
+        """Test skip_overwrite configuration."""
+        config = MigrationConfig(
+            source_org="source-org",
+            source_repo="source-repo",
+            target_org="target-org",
+            target_repo="target-repo",
+            source_pat="test-pat",
+            target_pat="test-pat",
+            skip_overwrite=True,
+        )
+        assert config.skip_overwrite is True
+
     def test_config_verbose(self):
         """Test verbose configuration."""
         config = MigrationConfig(
@@ -73,6 +87,7 @@ class TestMigrationConfig:
             target_pat="target-token",
             verbose=True,
             skip_envs=True,
+            skip_overwrite=True,
             org_to_org=False,
         )
         assert config.source_org == "source-org"
@@ -83,4 +98,5 @@ class TestMigrationConfig:
         assert config.target_pat == "target-token"
         assert config.verbose is True
         assert config.skip_envs is True
+        assert config.skip_overwrite is True
         assert config.org_to_org is False

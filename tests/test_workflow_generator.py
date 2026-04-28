@@ -3,6 +3,7 @@ from src.core.workflow_generator import (
     generate_environment_secret_steps,
     generate_environment_secret_jobs,
     generate_org_secret_steps,
+    generate_repo_secret_steps,
     generate_workflow,
     sanitize_job_id,
 )
@@ -153,6 +154,50 @@ class TestWorkflowGenerator:
         assert "DEPLOY_TOKEN" in steps
         assert steps.count("Migrate Org Secret") == 3
 
+    def test_generate_repo_secret_steps_skip_overwrite_enabled(self):
+        """Test repo secret steps include existence check when skip_overwrite is enabled."""
+        steps = generate_repo_secret_steps(
+            ["DB_PASSWORD"],
+            "target-org",
+            "target-repo",
+            skip_overwrite=True,
+        )
+        assert "repos/$TARGET_ORG/$TARGET_REPO/actions/secrets/$SECRET_NAME" in steps
+        assert "Skipping 'D B _ P A S S W O R D' because it already exists in target repo" in steps
+
+    def test_generate_repo_secret_steps_skip_overwrite_disabled(self):
+        """Test repo secret steps do not include existence check when skip_overwrite is disabled."""
+        steps = generate_repo_secret_steps(
+            ["DB_PASSWORD"],
+            "target-org",
+            "target-repo",
+        )
+        assert "if false && gh api \"repos/$TARGET_ORG/$TARGET_REPO/actions/secrets/$SECRET_NAME\"" in steps
+
+    def test_generate_org_secret_steps_skip_overwrite_enabled(self):
+        """Test org secret steps include existence check when skip_overwrite is enabled."""
+        steps = generate_org_secret_steps(
+            ["ORG_SECRET"],
+            "target-org",
+            skip_overwrite=True,
+        )
+        assert "orgs/$TARGET_ORG/actions/secrets/$SECRET_NAME" in steps
+        assert "already exists in target organization" in steps
+
+    def test_generate_environment_secret_steps_skip_overwrite_enabled(self):
+        """Test environment secret steps include existence check when skip_overwrite is enabled."""
+        env_secrets = {"production": ["DB_PASSWORD"]}
+        steps = generate_environment_secret_steps(
+            env_secrets,
+            "source-org",
+            "source-repo",
+            "target-org",
+            "target-repo",
+            skip_overwrite=True,
+        )
+        assert "environments/$ENVIRONMENT/secrets/$SECRET_NAME" in steps
+        assert "already exists" in steps
+
     def test_generate_workflow_repo_to_repo(self):
         """Test generating a complete repo-to-repo workflow."""
         workflow = generate_workflow(
@@ -212,6 +257,19 @@ class TestWorkflowGenerator:
         assert "SECRETS_MIGRATOR_TARGET_PAT" in workflow
         assert "SECRETS_MIGRATOR_SOURCE_PAT" in workflow
         assert "always()" in workflow
+
+    def test_generate_workflow_bulk_repo_mode_skip_overwrite_enabled(self):
+        """Test bulk repo migration includes skip overwrite check when enabled."""
+        workflow = generate_workflow(
+            "source-org",
+            "source-repo",
+            "target-org",
+            "target-repo",
+            "migrate-secrets",
+            repo_secrets=None,
+            skip_overwrite=True,
+        )
+        assert "if true && gh api \"repos/$TARGET_ORG/$TARGET_REPO/actions/secrets/$SECRET_NAME\"" in workflow
 
     def test_generate_workflow_cleanup_needs_env_jobs(self):
         """Test that cleanup job needs all env secret jobs."""

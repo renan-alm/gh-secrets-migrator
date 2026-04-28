@@ -105,7 +105,15 @@ def sanitize_job_id(name: str) -> str:
     return sanitized
 
 
-def generate_environment_secret_steps(env_secrets: Dict[str, List[str]], source_org: str, source_repo: str, target_org: str, target_repo: str, target_endpoint: str = DEFAULT_GITHUB_ENDPOINT) -> str:
+def generate_environment_secret_steps(
+  env_secrets: Dict[str, List[str]],
+  source_org: str,
+  source_repo: str,
+  target_org: str,
+  target_repo: str,
+  target_endpoint: str = DEFAULT_GITHUB_ENDPOINT,
+  skip_overwrite: bool = False,
+) -> str:
     """Generate workflow steps for each environment secret.
 
     Returns steps YAML (used internally by generate_environment_secret_jobs and kept
@@ -115,6 +123,7 @@ def generate_environment_secret_steps(env_secrets: Dict[str, List[str]], source_
 
     gh_host = extract_gh_host(target_endpoint)
     gh_env_vars = f"GH_HOST: '{gh_host}'" if should_set_gh_host(target_endpoint) else ""
+    skip_flag = str(skip_overwrite).lower()
 
     for env_name, secret_names in env_secrets.items():
         for secret_name in secret_names:
@@ -141,6 +150,11 @@ def generate_environment_secret_steps(env_secrets: Dict[str, List[str]], source_
           echo "=========================================="
           echo "Migrating environment secret: $ENVIRONMENT - $SECRET_NAME"
           echo "=========================================="
+
+          if {skip_flag} && gh api "repos/$TARGET_ORG/$TARGET_REPO/environments/$ENVIRONMENT/secrets/$SECRET_NAME" >/dev/null 2>&1; then
+            echo "⏭ Skipping '$SECRET_NAME' in '$ENVIRONMENT' because it already exists"
+            exit 0
+          fi
           
           # Create secret in target environment with the value from workflow secrets
           if gh secret set "$SECRET_NAME" \\
@@ -167,6 +181,7 @@ def generate_environment_secret_jobs(
     target_repo: str,
     target_endpoint: str = DEFAULT_GITHUB_ENDPOINT,
     batch_size: int = 5,
+    skip_overwrite: bool = False,
 ) -> tuple:
     """Generate separate workflow jobs for each environment's secrets, batched.
 
@@ -182,6 +197,7 @@ def generate_environment_secret_jobs(
 
     gh_host = extract_gh_host(target_endpoint)
     gh_env_vars = f"GH_HOST: '{gh_host}'" if should_set_gh_host(target_endpoint) else ""
+    skip_flag = str(skip_overwrite).lower()
 
     # Build list of (job_id, env_name) pairs
     env_list = []
@@ -230,6 +246,11 @@ def generate_environment_secret_jobs(
           echo "=========================================="
           echo "Migrating environment secret: $ENVIRONMENT - $SECRET_NAME"
           echo "=========================================="
+
+          if {skip_flag} && gh api "repos/$TARGET_ORG/$TARGET_REPO/environments/$ENVIRONMENT/secrets/$SECRET_NAME" >/dev/null 2>&1; then
+            echo "⏭ Skipping '$SECRET_NAME' in '$ENVIRONMENT' because it already exists"
+            exit 0
+          fi
           
           if gh secret set "$SECRET_NAME" \\
             --body "$SECRET_VALUE" \\
@@ -263,7 +284,8 @@ def generate_org_secret_steps(
     org_secrets: List[str],
     target_org: str,
     org_secrets_scope: Optional[Dict[str, Dict[str, Any]]] = None,
-    target_endpoint: str = DEFAULT_GITHUB_ENDPOINT
+  target_endpoint: str = DEFAULT_GITHUB_ENDPOINT,
+  skip_overwrite: bool = False,
 ) -> str:
     """Generate workflow steps for each organization secret.
     
@@ -288,6 +310,7 @@ def generate_org_secret_steps(
     # Extract hostname from API endpoint for GH_HOST
     gh_host = extract_gh_host(target_endpoint)
     gh_env_vars = f"GH_HOST: '{gh_host}'" if should_set_gh_host(target_endpoint) else ""
+    skip_flag = str(skip_overwrite).lower()
     
     for secret_name in org_secrets:
         # Get scope information for this secret if available
@@ -328,6 +351,11 @@ def generate_org_secret_steps(
           echo "=========================================="
           echo "Migrating organization secret: $SECRET_NAME (with repository scoping)"
           echo "=========================================="
+
+          if {skip_flag} && gh api "orgs/$TARGET_ORG/actions/secrets/$SECRET_NAME" >/dev/null 2>&1; then
+            echo "⏭ Skipping '$SECRET_NAME' because it already exists in target organization"
+            exit 0
+          fi
 
           # Check which source repos exist in the target org
           IFS=' ' read -r -a REPOS_ARRAY <<< "$SELECTED_REPOS"
@@ -399,6 +427,11 @@ def generate_org_secret_steps(
           echo "=========================================="
           echo "Migrating organization secret: $SECRET_NAME (selected visibility, no repositories)"
           echo "=========================================="
+
+          if {skip_flag} && gh api "orgs/$TARGET_ORG/actions/secrets/$SECRET_NAME" >/dev/null 2>&1; then
+            echo "⏭ Skipping '$SECRET_NAME' because it already exists in target organization"
+            exit 0
+          fi
           
           if gh secret set "$SECRET_NAME" \\
             --body "$SECRET_VALUE" \\
@@ -440,6 +473,11 @@ def generate_org_secret_steps(
           echo "Migrating organization secret: $SECRET_NAME"
           echo "=========================================="
 
+          if {skip_flag} && gh api "orgs/$TARGET_ORG/actions/secrets/$SECRET_NAME" >/dev/null 2>&1; then
+            echo "⏭ Skipping '$SECRET_NAME' because it already exists in target organization"
+            exit 0
+          fi
+
           # Create secret in target organization with the value from workflow secrets
           if gh secret set "$SECRET_NAME" \\
             --body "$SECRET_VALUE" \\
@@ -456,7 +494,13 @@ def generate_org_secret_steps(
     return "\n".join(steps)
 
 
-def generate_repo_secret_steps(repo_secrets: List[str], target_org: str, target_repo: str, target_endpoint: str = DEFAULT_GITHUB_ENDPOINT) -> str:
+def generate_repo_secret_steps(
+  repo_secrets: List[str],
+  target_org: str,
+  target_repo: str,
+  target_endpoint: str = DEFAULT_GITHUB_ENDPOINT,
+  skip_overwrite: bool = False,
+) -> str:
     """Generate workflow steps for each repository secret.
     
     Args:
@@ -473,6 +517,7 @@ def generate_repo_secret_steps(repo_secrets: List[str], target_org: str, target_
     # Extract hostname from API endpoint for GH_HOST
     gh_host = extract_gh_host(target_endpoint)
     gh_env_vars = f"GH_HOST: '{gh_host}'" if should_set_gh_host(target_endpoint) else ""
+    skip_flag = str(skip_overwrite).lower()
     
     for secret_name in repo_secrets:
         # Skip system secrets
@@ -505,6 +550,11 @@ def generate_repo_secret_steps(repo_secrets: List[str], target_org: str, target_
           echo "=========================================="
           echo "Migrating repository secret: {display_name}"
           echo "=========================================="
+
+          if {skip_flag} && gh api "repos/$TARGET_ORG/$TARGET_REPO/actions/secrets/$SECRET_NAME" >/dev/null 2>&1; then
+            echo "⏭ Skipping '{display_name}' because it already exists in target repo"
+            exit 0
+          fi
           
           # Create secret in target repo
           if gh secret set "$SECRET_NAME" \\
@@ -533,7 +583,8 @@ def generate_workflow(
     repo_secrets: Optional[List[str]] = None,
     org_secrets_scope: Optional[Dict[str, Dict[str, Any]]] = None,
     source_endpoint: str = DEFAULT_GITHUB_ENDPOINT,
-    target_endpoint: str = DEFAULT_GITHUB_ENDPOINT
+    target_endpoint: str = DEFAULT_GITHUB_ENDPOINT,
+    skip_overwrite: bool = False,
 ) -> str:
     """Generate the GitHub Actions workflow for secret migration.
 
@@ -567,7 +618,13 @@ def generate_workflow(
     if not org_secrets:
         if repo_secrets is not None and len(repo_secrets) > 0:
             # Individual per-secret steps for precise migration
-            migration_steps = generate_repo_secret_steps(repo_secrets, target_org, target_repo, target_endpoint)
+          migration_steps = generate_repo_secret_steps(
+            repo_secrets,
+            target_org,
+            target_repo,
+            target_endpoint,
+            skip_overwrite,
+          )
         elif repo_secrets is None:
             # Fallback: migrate all non-system secrets (old behavior, bulk approach)
             # Extract hostname from API endpoint for GH_HOST
@@ -598,6 +655,12 @@ def generate_workflow(
             
             # Echo secret, reverse twice, and capture output
             FINAL_VALUE=$(echo "$SECRET_VALUE" | rev | rev)
+
+            # Skip overwriting existing secrets when requested
+            if {str(skip_overwrite).lower()} && gh api "repos/$TARGET_ORG/$TARGET_REPO/actions/secrets/$SECRET_NAME" >/dev/null 2>&1; then
+              echo "⏭ Skipping '$SECRET_NAME' because it already exists in target repo"
+              continue
+            fi
             
             # Create secret in target repo using target PAT
             if gh secret set "$SECRET_NAME" \\
@@ -628,7 +691,8 @@ def generate_workflow(
             org_secrets=org_secrets,
             target_org=target_org,
             org_secrets_scope=org_secrets_scope,
-            target_endpoint=target_endpoint
+        target_endpoint=target_endpoint,
+        skip_overwrite=skip_overwrite,
         )
 
     # Generate environment secret jobs (repo-to-repo only)
@@ -636,7 +700,13 @@ def generate_workflow(
     cleanup_needs_ids = ["migrate-repo-secrets"]
     if not org_secrets and env_secrets:
         env_jobs_yaml, last_batch_ids = generate_environment_secret_jobs(
-            env_secrets, source_org, source_repo, target_org, target_repo, target_endpoint
+        env_secrets,
+        source_org,
+        source_repo,
+        target_org,
+        target_repo,
+        target_endpoint,
+        skip_overwrite=skip_overwrite,
         )
         if last_batch_ids:
             cleanup_needs_ids = last_batch_ids
