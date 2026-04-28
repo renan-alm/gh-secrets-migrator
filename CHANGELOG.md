@@ -6,6 +6,13 @@ This changelog is auto-generated from [Conventional Commits](https://www.convent
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.3.0] - 2026-01-21
+## [1.1.0] - 2026-04-28
+
+### Added
+
+- Add option to skip overwriting existing secrets (#98) (453e6a2)
+- Add GitHub Vars Migrator companion tool link (ebdbfb0)
+
 ## [1.0.2] - 2026-04-08
 
 ### Added
