@@ -218,3 +218,23 @@ class TestCLIAuthentication:
             assert config_call[0][0].source_pat == 'github-token'
             assert config_call[0][0].target_pat == 'target-specific'
             assert config_call[0][0].org_to_org is True
+
+    def test_skip_overwrite_env_var(self, mock_migrator):
+        """Test that SKIP_OVERWRITE env var is parsed and stored in config."""
+        runner = CliRunner()
+
+        with runner.isolated_filesystem():
+            env = {
+                'SOURCE_ORG': 'test-org',
+                'SOURCE_REPO': 'test-repo',
+                'TARGET_ORG': 'target-org',
+                'TARGET_REPO': 'target-repo',
+                'GITHUB_TOKEN': 'github-token',
+                'SKIP_OVERWRITE': 'true'
+            }
+
+            result = runner.invoke(migrate, [], env=env)
+
+            assert result.exit_code == 0
+            config_call = mock_migrator.call_args
+            assert config_call[0][0].skip_overwrite is True

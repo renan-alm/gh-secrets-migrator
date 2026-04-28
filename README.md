@@ -439,6 +439,7 @@ make help         # Show all available commands
 - `--target-pat`: Target PAT (required if GITHUB_TOKEN not set)
 - `--verbose`: Enable verbose logging (shows debug messages)
 - `--skip-envs`: Skip environment recreation (by default environments are recreated)
+- `--skip-overwrite`: Skip writing secrets that already exist in target
 - `--org-to-org`: Migrate only organization-level secrets (requires `--org-to-org` flag, ignores repo and env secrets)
 - `--source-endpoint`: GitHub API endpoint for source (default: `https://api.github.com`)
 - `--target-endpoint`: GitHub API endpoint for target (default: `https://api.github.com`)
@@ -465,6 +466,7 @@ All CLI flags can also be set via environment variables:
 **Options:**
 - `VERBOSE`: Enable verbose logging (set to any non-empty value)
 - `SKIP_ENVS`: Skip environment recreation (set to any non-empty value)
+- `SKIP_OVERWRITE`: Skip writing secrets that already exist in target (set to any non-empty value)
 - `ORG_TO_ORG`: Migrate only organization-level secrets (set to any non-empty value)
 
 ### Custom Endpoints (GHEC Data Residency, GHES, EMU)
@@ -750,6 +752,7 @@ Options:
   --target-endpoint TEXT    GitHub API endpoint for target (default: https://api.github.com)
   --verbose                 Enable verbose logging
   --skip-envs               Skip environment recreation
+  --skip-overwrite          Skip writing secrets that already exist in target
   --org-to-org              Migrate only organization-level secrets
   --help                    Show help message
 ```
