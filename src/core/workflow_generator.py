@@ -199,11 +199,16 @@ def generate_environment_secret_jobs(
     gh_env_vars = f"GH_HOST: '{gh_host}'" if should_set_gh_host(target_endpoint) else ""
     skip_flag = str(skip_overwrite).lower()
 
-    # Build list of (job_id, env_name) pairs
+    # Build list of (job_id, env_name) pairs — skip envs with no secrets
     env_list = []
     for env_name in env_secrets:
+        if not env_secrets[env_name]:
+            continue
         job_id = f"migrate-env-{sanitize_job_id(env_name)}"
         env_list.append((job_id, env_name))
+
+    if not env_list:
+        return ("", [])
 
     # Split into batches
     batches = []

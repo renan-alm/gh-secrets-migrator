@@ -100,6 +100,25 @@ class TestWorkflowGenerator:
         assert jobs_yaml == ""
         assert last_ids == []
 
+    def test_generate_environment_secret_jobs_envs_with_no_secrets(self):
+        """Test that environments with empty secret lists produce no jobs."""
+        env_secrets = {"production": [], "staging": []}
+        jobs_yaml, last_ids = generate_environment_secret_jobs(
+            env_secrets, "source-org", "source-repo", "target-org", "target-repo"
+        )
+        assert jobs_yaml == ""
+        assert last_ids == []
+
+    def test_generate_environment_secret_jobs_mixed_empty_and_populated(self):
+        """Test that only environments with secrets get jobs."""
+        env_secrets = {"production": ["DB_PASSWORD"], "staging": []}
+        jobs_yaml, last_ids = generate_environment_secret_jobs(
+            env_secrets, "source-org", "source-repo", "target-org", "target-repo"
+        )
+        assert "environment: production" in jobs_yaml
+        assert "staging" not in jobs_yaml
+        assert last_ids == ["migrate-env-production"]
+
     def test_generate_environment_secret_jobs_batched(self):
         """Test that >5 environments are batched into groups of 5."""
         env_secrets = {f"env-{i}": [f"SECRET_{i}"] for i in range(7)}
