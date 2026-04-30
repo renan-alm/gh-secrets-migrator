@@ -556,7 +556,7 @@ class TestMigratorEnvironmentSecretsInRun:
         info_calls = [str(c) for c in mock_logger.info.call_args_list]
         assert any("Environment secrets to migrate" in c for c in info_calls)
         assert any("production" in c and "DB_PASSWORD" in c for c in info_calls)
-        assert any("staging" in c and "(no secrets)" in c for c in info_calls)
+        assert any("staging" in c and "(no secrets, skipping from workflow)" in c for c in info_calls)
 
     @patch('src.core.migrator.generate_workflow')
     @patch('src.clients.github.Github')
@@ -564,7 +564,7 @@ class TestMigratorEnvironmentSecretsInRun:
         self, mock_github_class, mock_generate_workflow,
         migration_config, mock_logger
     ):
-        """Test that run() returns early if only system secrets exist (no workflow generated)."""
+        """Test that run() returns early if only system secrets and no env secrets exist."""
         mock_github_class.return_value = Mock()
         migrator = Migrator(migration_config, mock_logger)
 
@@ -580,6 +580,8 @@ class TestMigratorEnvironmentSecretsInRun:
         migrator.source_api.list_repo_secrets.return_value = [
             "github_token", "SECRETS_MIGRATOR_PAT"
         ]
+        # No environment secrets either
+        migrator.source_api.list_all_environments_with_secrets.return_value = {}
         migrator.source_api.get_rate_limit_info.return_value = {
             'remaining': 5000, 'limit': 5000, 'reset_time': 0, 'reset_in_seconds': 0
         }
@@ -588,6 +590,49 @@ class TestMigratorEnvironmentSecretsInRun:
 
         # generate_workflow should never be called
         mock_generate_workflow.assert_not_called()
-        # list_all_environments_with_secrets should not be called either
-        # (it comes after the early return)
-        migrator.source_api.list_all_environments_with_secrets.assert_not_called()
+
+    @patch('src.core.migrator.generate_workflow')
+    @patch('src.clients.github.Github')
+    def test_run_proceeds_with_only_env_secrets(
+        self, mock_github_class, mock_generate_workflow,
+        migration_config, mock_logger
+    ):
+        """Test that run() proceeds when there are no repo secrets but env secrets exist."""
+        mock_github_class.return_value = Mock()
+        migrator = Migrator(migration_config, mock_logger)
+
+        migrator.source_api = Mock(spec=GitHubClient)
+        migrator.target_api = Mock(spec=GitHubClient)
+
+        migrator._validate_permissions = Mock()
+        migrator._wait_for_rate_limit_reset = Mock()
+        migrator._recreate_environments = Mock()
+        migrator._check_rate_limits = Mock()
+
+        # No repo secrets (only system ones)
+        migrator.source_api.list_repo_secrets.return_value = [
+            "github_token", "SECRETS_MIGRATOR_PAT"
+        ]
+        # But environment secrets exist
+        migrator.source_api.list_all_environments_with_secrets.return_value = {
+            "production": ["DB_PASSWORD", "API_KEY"]
+        }
+        migrator.source_api.get_rate_limit_info.return_value = {
+            'remaining': 5000, 'limit': 5000, 'reset_time': 0, 'reset_in_seconds': 0
+        }
+        migrator.source_api.get_default_branch.return_value = "main"
+        migrator.source_api.get_commit_sha.return_value = "abc123"
+        migrator.source_api.delete_branch.return_value = None
+        migrator.source_api.create_repo_secret.return_value = None
+        migrator.source_api.create_branch.return_value = None
+        migrator.source_api.create_file.return_value = "sha456"
+        migrator._get_workflow_run_url = Mock(return_value="")
+        mock_generate_workflow.return_value = "workflow content"
+
+        migrator.run()
+
+        # generate_workflow SHOULD be called since env secrets exist
+        mock_generate_workflow.assert_called_once()
+        call_kwargs = mock_generate_workflow.call_args
+        # env_secrets should include the production environment
+        assert "production" in (call_kwargs.kwargs.get('env_secrets') or call_kwargs[1].get('env_secrets', {}))
