@@ -616,7 +616,7 @@ class Migrator:
                     secret_list = ", ".join(secret_names)
                     self.log.info(f"  - {env_name}: {secret_list}")
                 else:
-                    self.log.info(f"  - {env_name}: (no secrets)")
+                    self.log.info(f"  - {env_name}: (no secrets, skipping from workflow)")
         else:
             self.log.debug("No environment secrets found in source repository")
 
