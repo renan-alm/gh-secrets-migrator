@@ -593,15 +593,14 @@ class Migrator:
             if name not in ("github_token", "SECRETS_MIGRATOR_PAT", "SECRETS_MIGRATOR_TARGET_PAT", "SECRETS_MIGRATOR_SOURCE_PAT")
         ]
 
-        if not secrets_to_migrate:
-            self.log.info("No secrets to migrate (found only system secrets)")
-            return
+        if secrets_to_migrate:
+            self.log.info(f"Secrets to migrate ({len(secrets_to_migrate)} total):")
+            for name in secrets_to_migrate:
+                self.log.info(f"  - {name}")
+        else:
+            self.log.info("No repository secrets to migrate (found only system secrets)")
 
-        self.log.info(f"Secrets to migrate ({len(secrets_to_migrate)} total):")
-        for name in secrets_to_migrate:
-            self.log.info(f"  - {name}")
-
-        # Step 2b: List environment secrets from source repository (for informational purposes)
+        # Step 2b: List environment secrets from source repository
         self.log.debug("Fetching environment secrets from source repository...")
         env_secrets_info = self.source_api.list_all_environments_with_secrets(
             self.config.source_org, self.config.source_repo
@@ -619,6 +618,12 @@ class Migrator:
                     self.log.info(f"  - {env_name}: (no secrets, skipping from workflow)")
         else:
             self.log.debug("No environment secrets found in source repository")
+
+        # Check if there's anything to migrate at all
+        has_env_secrets = any(env_secrets_info.get(env) for env in env_secrets_info) if env_secrets_info else False
+        if not secrets_to_migrate and not has_env_secrets:
+            self.log.info("No secrets to migrate (no repo secrets or environment secrets found)")
+            return
 
         # Step 3: Get default branch and commit SHA
         self.log.debug("Getting default branch...")
