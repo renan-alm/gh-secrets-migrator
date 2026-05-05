@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 This changelog is auto-generated from [Conventional Commits](https://www.conventionalcommits.org/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-05-05
+
+### Added
+
+- Add support for gh-gei compatible PATs (#102) (26f5322)
+- Add comprehensive help and examples to CLI commands (#101) (490fe93)
+
+### Fixed
+
+- allow migration when only environment secrets exist (#100) (b7778e4)
+- skip environments with no secrets when generating migration workflow (#99) (6b33feb)
+
 ## [1.1.0] - 2026-04-28
 
 ### Added
