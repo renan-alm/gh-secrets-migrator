@@ -437,6 +437,8 @@ make help         # Show all available commands
 
 - `--source-pat`: Source PAT (required if GITHUB_TOKEN not set)
 - `--target-pat`: Target PAT (required if GITHUB_TOKEN not set)
+- `--github-source-pat`: gh-gei compatible source PAT (uses `GH_SOURCE_PAT` env var; overridden by `--source-pat`)
+- `--github-target-pat`: gh-gei compatible target PAT (uses `GH_PAT` env var; overridden by `--target-pat`)
 - `--verbose`: Enable verbose logging (shows debug messages)
 - `--skip-envs`: Skip environment recreation (by default environments are recreated)
 - `--skip-overwrite`: Skip writing secrets that already exist in target
@@ -452,6 +454,8 @@ All CLI flags can also be set via environment variables:
 - `GITHUB_TOKEN`: If set, uses this token for both source and target authentication (must have permissions for both repos)
 - `SOURCE_PAT`: Personal Access Token for source repository (overrides GITHUB_TOKEN if set)
 - `TARGET_PAT`: Personal Access Token for target repository (overrides GITHUB_TOKEN if set)
+- `GH_SOURCE_PAT`: gh-gei compatible source PAT (overridden by `SOURCE_PAT`; falls back to `GH_PAT`)
+- `GH_PAT`: gh-gei compatible target PAT (overridden by `TARGET_PAT`; also used as source fallback when `GH_SOURCE_PAT` is not set)
 
 **Repository Configuration:**
 - `SOURCE_ORG`: Source organization name
@@ -551,6 +555,36 @@ gh secrets-migrator \
 ```
 
 **Note**: GHEC EMU (Enterprise Managed Users) can use either standard GitHub.com endpoints (`https://api.github.com`) or Data Residency endpoints (`https://api.<INSTANCE>.ghe.com`), depending on your organization's configuration.
+
+### gh-gei Compatible Authentication
+
+If you are coming from the [GitHub Enterprise Importer (gh-gei)](https://github.com/github/gh-gei) plugin and already have `GH_SOURCE_PAT` and `GH_PAT` environment variables configured, they will work out of the box:
+
+```bash
+export GH_SOURCE_PAT=ghp_xxxxxxxxxxxx
+export GH_PAT=ghp_yyyyyyyyyyyy
+
+gh secrets-migrator \
+  --source-org myorg \
+  --source-repo myrepo \
+  --target-org targetorg \
+  --target-repo targetrepo
+```
+
+You can also use the CLI flags directly:
+```bash
+gh secrets-migrator \
+  --source-org myorg \
+  --source-repo myrepo \
+  --target-org targetorg \
+  --target-repo targetrepo \
+  --github-source-pat <SOURCE_PAT> \
+  --github-target-pat <TARGET_PAT>
+```
+
+**Authentication priority (source):** `SOURCE_PAT` > `GH_SOURCE_PAT` > `GH_PAT` > `GITHUB_TOKEN`
+
+**Authentication priority (target):** `TARGET_PAT` > `GH_PAT` > `GITHUB_TOKEN`
 
 ## Security
 
