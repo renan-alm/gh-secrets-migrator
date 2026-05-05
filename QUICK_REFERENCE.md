@@ -145,6 +145,8 @@ gh secrets-migrator \
 - `--verbose` - Enable debug logging
 - `--skip-envs` - Skip environment recreation (repo-to-repo only)
 - `--org-to-org` - Migrate only organization-level secrets (ignores repo/env secrets)
+- `--github-source-pat` - gh-gei compatible source PAT (uses GH_SOURCE_PAT env var; overridden by --source-pat)
+- `--github-target-pat` - gh-gei compatible target PAT (uses GH_PAT env var; overridden by --target-pat)
 - `--source-endpoint` - GitHub API endpoint for source (default: https://api.github.com)
 - `--target-endpoint` - GitHub API endpoint for target (default: https://api.github.com)
 
@@ -154,6 +156,8 @@ gh secrets-migrator \
 - `GITHUB_TOKEN` - Fallback for both source and target PATs (if not explicitly provided)
 - `SOURCE_PAT` - Source Personal Access Token (overrides GITHUB_TOKEN)
 - `TARGET_PAT` - Target Personal Access Token (overrides GITHUB_TOKEN)
+- `GH_SOURCE_PAT` - gh-gei compatible source PAT (overridden by SOURCE_PAT; falls back to GH_PAT)
+- `GH_PAT` - gh-gei compatible target PAT (overridden by TARGET_PAT; also source fallback)
 
 **Repository Configuration:**
 - `SOURCE_ORG` - Source organization name

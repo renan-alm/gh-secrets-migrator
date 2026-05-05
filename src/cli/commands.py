@@ -35,6 +35,12 @@ Examples:
                         --target-org fabrikam --target-repo app \\
                         --source-endpoint https://ghes.contoso.com/api/v3 \\
                         --source-pat <PAT> --target-pat <PAT>
+
+  Using gh-gei compatible environment variables:
+    export GH_SOURCE_PAT=ghp_xxxxxxxxxxxx
+    export GH_PAT=ghp_yyyyyyyyyyyy
+    gh secrets-migrator --source-org contoso --source-repo app \\
+                        --target-org fabrikam --target-repo app
 """
 
 
@@ -51,6 +57,8 @@ OPTION_GROUPS = [
     ("Authentication", [
         ("--source-pat", "--source-pat <source-pat>"),
         ("--target-pat", "--target-pat <target-pat>"),
+        ("--github-source-pat", "--github-source-pat <github-source-pat>"),
+        ("--github-target-pat", "--github-target-pat <github-target-pat>"),
     ]),
     ("Endpoints", [
         ("--source-endpoint", "--source-endpoint <source-endpoint>"),
@@ -71,7 +79,10 @@ class FriendlyCommand(click.Command):
     def parse_args(self, ctx, args):
         # Show help when no CLI args and no env vars provide the required options
         if not args:
-            has_env = any(os.environ.get(v) for v in ("SOURCE_ORG", "TARGET_ORG", "SOURCE_REPO"))
+            has_env = any(
+                os.environ.get(v)
+                for v in ("SOURCE_ORG", "TARGET_ORG", "SOURCE_REPO")
+            )
             if not has_env:
                 click.echo(ctx.get_help())
                 ctx.exit(0)
@@ -181,6 +192,24 @@ class FriendlyCommand(click.Command):
     )
 )
 @click.option(
+    "--github-source-pat",
+    default="",
+    envvar="GH_SOURCE_PAT",
+    help=(
+        "gh-gei compatible source PAT. Uses GH_SOURCE_PAT env variable. "
+        "Falls back to GH_PAT, then GITHUB_TOKEN. Overridden by --source-pat."
+    )
+)
+@click.option(
+    "--github-target-pat",
+    default="",
+    envvar="GH_PAT",
+    help=(
+        "gh-gei compatible target PAT. Uses GH_PAT env variable. "
+        "Falls back to GITHUB_TOKEN. Overridden by --target-pat."
+    )
+)
+@click.option(
     "--verbose",
     is_flag=True,
     envvar="VERBOSE",
@@ -229,6 +258,8 @@ def migrate(
     target_repo,
     source_pat,
     target_pat,
+    github_source_pat,
+    github_target_pat,
     verbose,
     skip_envs,
     skip_overwrite,
@@ -276,13 +307,21 @@ def migrate(
         logger.info(f"Source: {source_org}/{source_repo}")
         logger.info(f"Target: {target_org}/{target_repo}")
 
-    # Check for authentication tokens (prioritize specific PATs over GITHUB_TOKEN)
+    # Check for authentication tokens
+    # Priority for source: SOURCE_PAT > GH_SOURCE_PAT > GH_PAT > GITHUB_TOKEN
+    # Priority for target: TARGET_PAT > GH_PAT > GITHUB_TOKEN
     github_token = os.getenv("GITHUB_TOKEN")
 
-    # Determine source PAT (SOURCE_PAT takes precedence over GITHUB_TOKEN)
+    # Determine source PAT
     if source_pat:
         source_pat_value = source_pat
         source_token_source = "SOURCE_PAT"
+    elif github_source_pat:
+        source_pat_value = github_source_pat
+        source_token_source = "GH_SOURCE_PAT"
+    elif github_target_pat:
+        source_pat_value = github_target_pat
+        source_token_source = "GH_PAT"
     elif github_token:
         source_pat_value = github_token
         source_token_source = "GITHUB_TOKEN"
@@ -290,10 +329,13 @@ def migrate(
         source_pat_value = ""
         source_token_source = None
 
-    # Determine target PAT (TARGET_PAT takes precedence over GITHUB_TOKEN)
+    # Determine target PAT
     if target_pat:
         target_pat_value = target_pat
         target_token_source = "TARGET_PAT"
+    elif github_target_pat:
+        target_pat_value = github_target_pat
+        target_token_source = "GH_PAT"
     elif github_token:
         target_pat_value = github_token
         target_token_source = "GITHUB_TOKEN"
@@ -313,7 +355,8 @@ def migrate(
     if not source_pat_value or not target_pat_value:
         logger.error(
             "source-pat and target-pat are required "
-            "(or set SOURCE_PAT/TARGET_PAT or GITHUB_TOKEN environment variables)"
+            "(or set SOURCE_PAT/TARGET_PAT, GH_SOURCE_PAT/GH_PAT, "
+            "or GITHUB_TOKEN environment variables)"
         )
         raise SystemExit(1)
 
