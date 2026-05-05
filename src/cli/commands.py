@@ -7,43 +7,178 @@ from src.core.config import MigrationConfig
 from src.core.workflow_generator import normalize_endpoint
 
 
-@click.command()
+EPILOG = """\b
+Examples:
+  Repo-to-repo migration:
+    gh secrets-migrator --source-org contoso --source-repo app \\
+                        --target-org fabrikam --target-repo app \\
+                        --source-pat <PAT> --target-pat <PAT>
+
+  Org-to-org migration (org secrets only):
+    gh secrets-migrator --source-org contoso --source-repo app \\
+                        --target-org fabrikam --org-to-org \\
+                        --source-pat <PAT> --target-pat <PAT>
+
+  Using environment variables:
+    export SOURCE_PAT=ghp_xxxxxxxxxxxx
+    export TARGET_PAT=ghp_yyyyyyyyyyyy
+    gh secrets-migrator --source-org contoso --source-repo app \\
+                        --target-org fabrikam --target-repo app
+
+  Using a single GITHUB_TOKEN for both source and target:
+    export GITHUB_TOKEN=ghp_xxxxxxxxxxxx
+    gh secrets-migrator --source-org contoso --source-repo app \\
+                        --target-org fabrikam --target-repo app
+
+  Migrating from GitHub Enterprise Server:
+    gh secrets-migrator --source-org contoso --source-repo app \\
+                        --target-org fabrikam --target-repo app \\
+                        --source-endpoint https://ghes.contoso.com/api/v3 \\
+                        --source-pat <PAT> --target-pat <PAT>
+"""
+
+
+# --- Option metadata (grouped) ---
+OPTION_GROUPS = [
+    ("Required", [
+        ("--source-org", "--source-org <source-org>"),
+        ("--source-repo", "--source-repo <source-repo>"),
+        ("--target-org", "--target-org <target-org>"),
+    ]),
+    ("Repository", [
+        ("--target-repo", "--target-repo <target-repo>"),
+    ]),
+    ("Authentication", [
+        ("--source-pat", "--source-pat <source-pat>"),
+        ("--target-pat", "--target-pat <target-pat>"),
+    ]),
+    ("Endpoints", [
+        ("--source-endpoint", "--source-endpoint <source-endpoint>"),
+        ("--target-endpoint", "--target-endpoint <target-endpoint>"),
+    ]),
+    ("Behavior", [
+        ("--org-to-org", "--org-to-org"),
+        ("--skip-envs", "--skip-envs"),
+        ("--skip-overwrite", "--skip-overwrite"),
+        ("--verbose", "--verbose"),
+    ]),
+]
+
+
+class FriendlyCommand(click.Command):
+    """Custom Click command that shows full help when invoked without arguments."""
+
+    def parse_args(self, ctx, args):
+        # Show help when no CLI args and no env vars provide the required options
+        if not args:
+            has_env = any(os.environ.get(v) for v in ("SOURCE_ORG", "TARGET_ORG", "SOURCE_REPO"))
+            if not has_env:
+                click.echo(ctx.get_help())
+                ctx.exit(0)
+        return super().parse_args(ctx, args)
+
+    def format_help(self, ctx, formatter):
+        """Override help formatting to group options into logical sections."""
+        # Write usage
+        self.format_usage(ctx, formatter)
+        formatter.write("\n")
+
+        # Write description
+        if self.help:
+            formatter.write_paragraph()
+            with formatter.indentation():
+                formatter.write(self.help)
+            formatter.write("\n")
+
+        # Build a map of option names to their help records
+        opts_map = {}
+        for param in self.get_params(ctx):
+            if isinstance(param, click.Option):
+                # Get the option declaration (e.g., --source-org)
+                for opt_name in param.opts + param.secondary_opts:
+                    record = param.get_help_record(ctx)
+                    if record:
+                        opts_map[opt_name] = record
+
+        # Write grouped options
+        for group_name, group_opts in OPTION_GROUPS:
+            formatter.write("\n")
+            formatter.write(f"{group_name}:\n")
+            records = []
+            for opt_key, _ in group_opts:
+                if opt_key in opts_map:
+                    records.append(opts_map[opt_key])
+            if records:
+                formatter.write_dl(records)
+
+        # Write help option separately
+        formatter.write("\n")
+        formatter.write("Other:\n")
+        help_record = None
+        for param in self.get_params(ctx):
+            if isinstance(param, click.Option) and "--help" in param.opts:
+                help_record = param.get_help_record(ctx)
+                break
+        if help_record:
+            formatter.write_dl([help_record])
+
+        # Write epilog (examples)
+        if self.epilog:
+            formatter.write("\n")
+            formatter.write(self.epilog)
+            formatter.write("\n")
+
+
+@click.command(
+    cls=FriendlyCommand,
+    epilog=EPILOG,
+    context_settings={"help_option_names": ["-h", "--help"]},
+)
 @click.option(
     "--source-org",
-    required=True,
+    required=False,
     envvar="SOURCE_ORG",
-    help="Source organization name"
+    help="Source organization name. Uses SOURCE_ORG env variable. (REQUIRED)"
 )
 @click.option(
     "--source-repo",
     required=False,
     envvar="SOURCE_REPO",
-    help="Source repository name (required for both repo-to-repo and org-to-org migrations)"
+    help="Source repository name. Uses SOURCE_REPO env variable. (REQUIRED)"
 )
 @click.option(
     "--target-org",
-    required=True,
+    required=False,
     envvar="TARGET_ORG",
-    help="Target organization name"
+    help="Target organization name. Uses TARGET_ORG env variable. (REQUIRED)"
 )
 @click.option(
     "--target-repo",
     required=False,
     default="",
     envvar="TARGET_REPO",
-    help="Target repository name (required for repo-to-repo migration, optional for org-to-org)"
+    help=(
+        "Target repository name. Uses TARGET_REPO env variable. "
+        "Required for repo-to-repo, optional for --org-to-org."
+    )
 )
 @click.option(
     "--source-pat",
     default="",
     envvar="SOURCE_PAT",
-    help="Personal Access Token for source repository (optional if GITHUB_TOKEN is set)"
+    help=(
+        "Uses SOURCE_PAT env variable or --source-pat option. "
+        "Will fall back to GITHUB_TOKEN if not set."
+    )
 )
 @click.option(
     "--target-pat",
     default="",
     envvar="TARGET_PAT",
-    help="Personal Access Token for target repository (optional if GITHUB_TOKEN is set)"
+    help=(
+        "Uses TARGET_PAT env variable or --target-pat option. "
+        "Will fall back to GITHUB_TOKEN if not set."
+    )
 )
 @click.option(
     "--verbose",
@@ -73,13 +208,19 @@ from src.core.workflow_generator import normalize_endpoint
     "--source-endpoint",
     default="https://api.github.com",
     envvar="SOURCE_ENDPOINT",
-    help="GitHub API endpoint for source (default: https://api.github.com)"
+    help=(
+        "GitHub API endpoint for source. Uses SOURCE_ENDPOINT env variable. "
+        "For example: https://ghes.contoso.com/api/v3"
+    )
 )
 @click.option(
     "--target-endpoint",
     default="https://api.github.com",
     envvar="TARGET_ENDPOINT",
-    help="GitHub API endpoint for target (default: https://api.github.com)"
+    help=(
+        "GitHub API endpoint for target. Uses TARGET_ENDPOINT env variable. "
+        "Defaults to https://api.github.com"
+    )
 )
 def migrate(
     source_org,
@@ -103,11 +244,20 @@ def migrate(
     """
     logger = Logger(verbose=verbose)
 
-    # Validate source-repo is always provided (required for workflow execution)
+    # Validate all required options and report ALL missing ones at once
+    missing = []
+    if not source_org:
+        missing.append("--source-org")
     if not source_repo:
-        logger.error("source-repo is required for both repo-to-repo and org-to-org migrations")
-        logger.error("REASON: The source-repo is a placeholder for workflow execution")
-        logger.error("The migration workflow must run in a source repository")
+        missing.append("--source-repo")
+    if not target_org:
+        missing.append("--target-org")
+
+    if missing:
+        for opt in missing:
+            click.echo(f"Error: Missing required option '{opt}'.", err=True)
+        click.echo("", err=True)
+        click.echo("Try 'gh secrets-migrator --help' for help.", err=True)
         raise SystemExit(1)
 
     # Validate modes
