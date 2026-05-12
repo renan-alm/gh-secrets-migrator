@@ -124,6 +124,42 @@ class TestMigratorValidationMessages:
         assert str(exc.value) == "Source workflow repository 'source-org/source-repo' not found."
 
     @patch('src.clients.github.Github')
+    def test_source_workflow_repository_requires_source_repo(
+        self, mock_github_class, migration_config, mock_logger
+    ):
+        """Org mode should require source-repo for workflow hosting."""
+        migration_config.source_repo = ""
+        mock_github_class.return_value = Mock()
+
+        migrator = Migrator(migration_config, mock_logger)
+
+        with pytest.raises(RuntimeError) as exc:
+            migrator._validate_org_workflow_repository()
+
+        assert (
+            str(exc.value)
+            == "source-repo is required for organization-to-organization migrations to host the workflow."
+        )
+
+    @patch('src.clients.github.Github')
+    def test_source_workflow_repository_validation_uses_list_repo_secrets(
+        self, mock_github_class, migration_config, mock_logger
+    ):
+        """Org workflow validation should use raw-API secret listing helper."""
+        mock_source_github = Mock()
+        mock_target_github = Mock()
+
+        mock_source_github.get_repo.return_value = Mock()
+        mock_github_class.side_effect = [mock_source_github, mock_target_github]
+
+        migrator = Migrator(migration_config, mock_logger)
+        migrator.source_api.list_repo_secrets = Mock(return_value=[])
+
+        migrator._validate_org_workflow_repository()
+
+        migrator.source_api.list_repo_secrets.assert_called_once_with("source-org", "source-repo")
+
+    @patch('src.clients.github.Github')
     def test_org_to_org_run_fails_before_workflow_generation(
         self, mock_github_class, migration_config, mock_logger
     ):

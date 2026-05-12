@@ -358,16 +358,21 @@ class Migrator:
         and temporary PAT secrets. Validate this early so users get a clear message before
         attempting any migration setup steps.
         """
-        source_repo_path = f"{self.config.source_org}/{self.config.source_repo}"
+        source_repo = (self.config.source_repo or "").strip()
+        if not source_repo:
+            raise RuntimeError(
+                "source-repo is required for organization-to-organization migrations to host the workflow."
+            )
+
+        source_repo_path = f"{self.config.source_org}/{source_repo}"
         self.log.debug("Checking source workflow repository access...")
 
         try:
-            source_repo = self.source_api.client.get_repo(source_repo_path)
+            self.source_api.client.get_repo(source_repo_path)
             self.log.debug(f"✓ Source workflow repository is accessible: {source_repo_path}")
 
             # Validate actions secret access because org-to-org flow stores temp PAT secrets here.
-            secrets = source_repo.get_secrets()
-            _ = list(secrets)
+            self.source_api.list_repo_secrets(self.config.source_org, source_repo)
             self.log.debug("✓ Source PAT can manage workflow repository secrets")
         except Exception as repo_error:
             error_msg = str(repo_error)
