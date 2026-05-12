@@ -124,7 +124,7 @@ class TestMigratorValidationMessages:
         assert str(exc.value) == "Source workflow repository 'source-org/source-repo' not found."
 
     @patch('src.clients.github.Github')
-    def test_source_workflow_repository_requires_source_repo(
+    def test_org_workflow_validation_requires_source_repo(
         self, mock_github_class, migration_config, mock_logger
     ):
         """Org mode should require source-repo for workflow hosting."""
@@ -142,7 +142,7 @@ class TestMigratorValidationMessages:
         )
 
     @patch('src.clients.github.Github')
-    def test_source_workflow_repository_validation_uses_list_repo_secrets(
+    def test_org_workflow_validation_uses_raw_api_for_secrets(
         self, mock_github_class, migration_config, mock_logger
     ):
         """Org workflow validation should use raw-API secret listing helper."""
