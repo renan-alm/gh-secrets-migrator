@@ -196,26 +196,11 @@ class Migrator:
             except Exception as source_error:
                 error_msg = str(source_error)
                 if "404" in error_msg or "Not Found" in error_msg:
-                    raise RuntimeError(
-                        f"Source repository '{source_repo_path}' not found.\n"
-                        "Please verify:\n"
-                        f"  - Organization name is correct: {self.config.source_org}\n"
-                        f"  - Repository name is correct: {self.config.source_repo}\n"
-                        "  - PAT has access to the repository"
-                    )
+                    raise RuntimeError(f"Source repository '{source_repo_path}' not found.")
                 elif "401" in error_msg or "Unauthorized" in error_msg:
-                    raise RuntimeError(
-                        "Authentication failed for source repository.\n"
-                        "The source PAT may be invalid, expired, or revoked.\n"
-                        "Please verify your source-pat is correct."
-                    )
+                    raise RuntimeError("Authentication failed for source repository. Check source-pat.")
                 elif "403" in error_msg or "Resource not accessible" in error_msg:
-                    raise RuntimeError(
-                        "Source PAT lacks permission to manage secrets.\n"
-                        "Ensure your source PAT has these scopes:\n"
-                        "  - 'repo' (Full control of private repositories)\n"
-                        "  - 'workflow' (Update GitHub Action workflows)"
-                    )
+                    raise RuntimeError("Source PAT lacks permission to manage secrets.")
                 else:
                     raise RuntimeError(f"Cannot access source repository: {source_error}")
 
@@ -234,26 +219,11 @@ class Migrator:
             except Exception as target_error:
                 error_msg = str(target_error)
                 if "404" in error_msg or "Not Found" in error_msg:
-                    raise RuntimeError(
-                        f"Target repository '{target_repo_path}' not found.\n"
-                        "Please verify:\n"
-                        f"  - Organization name is correct: {self.config.target_org}\n"
-                        f"  - Repository name is correct: {self.config.target_repo}\n"
-                        "  - PAT has access to the repository"
-                    )
+                    raise RuntimeError(f"Target repository '{target_repo_path}' not found.")
                 elif "401" in error_msg or "Unauthorized" in error_msg:
-                    raise RuntimeError(
-                        "Authentication failed for target repository.\n"
-                        "The target PAT may be invalid, expired, or revoked.\n"
-                        "Please verify your target-pat is correct."
-                    )
+                    raise RuntimeError("Authentication failed for target repository. Check target-pat.")
                 elif "403" in error_msg or "Resource not accessible" in error_msg:
-                    raise RuntimeError(
-                        "Target PAT lacks permission to manage secrets.\n"
-                        "Ensure your target PAT has these scopes:\n"
-                        "  - 'repo' (Full control of private repositories)\n"
-                        "  - 'workflow' (Update GitHub Action workflows)"
-                    )
+                    raise RuntimeError("Target PAT lacks permission to manage secrets.")
                 else:
                     raise RuntimeError(f"Cannot access target repository: {target_error}")
 
@@ -344,14 +314,10 @@ class Migrator:
             except Exception as source_error:
                 error_msg = str(source_error)
                 if "404" in error_msg or "Not Found" in error_msg:
-                    raise RuntimeError(
-                        f"Source organization '{self.config.source_org}' not found.\n"
-                        f"Please verify the organization name is correct."
-                    )
+                    raise RuntimeError(f"Source organization '{self.config.source_org}' not found.")
                 elif "401" in error_msg or "Unauthorized" in error_msg:
                     raise RuntimeError(
-                        f"Source PAT does not have access to organization '{self.config.source_org}'.\n"
-                        f"Please verify your source PAT has the necessary permissions."
+                        f"Authentication failed for source organization '{self.config.source_org}'."
                     )
                 else:
                     raise RuntimeError(f"Failed to access source organization: {source_error}")
@@ -369,14 +335,10 @@ class Migrator:
             except Exception as target_error:
                 error_msg = str(target_error)
                 if "404" in error_msg or "Not Found" in error_msg:
-                    raise RuntimeError(
-                        f"Target organization '{self.config.target_org}' not found.\n"
-                        f"Please verify the organization name is correct."
-                    )
+                    raise RuntimeError(f"Target organization '{self.config.target_org}' not found.")
                 elif "401" in error_msg or "Unauthorized" in error_msg:
                     raise RuntimeError(
-                        f"Target PAT does not have access to organization '{self.config.target_org}'.\n"
-                        f"Please verify your target PAT has the necessary permissions."
+                        f"Authentication failed for target organization '{self.config.target_org}'."
                     )
                 else:
                     raise RuntimeError(f"Failed to access target organization: {target_error}")
@@ -388,6 +350,34 @@ class Migrator:
         except Exception as e:
             self.log.error(f"Unexpected error during permission validation: {type(e).__name__}: {e}")
             raise RuntimeError(f"Failed to validate organization permissions: {e}")
+
+    def _validate_org_workflow_repository(self) -> None:
+        """Validate that source workflow repository exists and can be accessed.
+
+        Org-to-org mode still relies on a source repository to host the migration workflow
+        and temporary PAT secrets. Validate this early so users get a clear message before
+        attempting any migration setup steps.
+        """
+        source_repo_path = f"{self.config.source_org}/{self.config.source_repo}"
+        self.log.debug("Checking source workflow repository access...")
+
+        try:
+            source_repo = self.source_api.client.get_repo(source_repo_path)
+            self.log.debug(f"✓ Source workflow repository is accessible: {source_repo_path}")
+
+            # Validate actions secret access because org-to-org flow stores temp PAT secrets here.
+            secrets = source_repo.get_secrets()
+            _ = list(secrets)
+            self.log.debug("✓ Source PAT can manage workflow repository secrets")
+        except Exception as repo_error:
+            error_msg = str(repo_error)
+            if "404" in error_msg or "Not Found" in error_msg:
+                raise RuntimeError(f"Source workflow repository '{source_repo_path}' not found.")
+            if "401" in error_msg or "Unauthorized" in error_msg:
+                raise RuntimeError("Authentication failed for source workflow repository. Check source-pat.")
+            if "403" in error_msg or "Resource not accessible" in error_msg:
+                raise RuntimeError("Source PAT lacks permission for source workflow repository.")
+            raise RuntimeError(f"Cannot access source workflow repository: {repo_error}")
 
     def _migrate_org_secrets_workflow(self) -> None:
         """Migrate organization secrets using GitHub Actions workflow.
@@ -549,6 +539,9 @@ class Migrator:
             # Validate PAT permissions for org access
             self.log.info("Validating PAT permissions...")
             self._validate_org_permissions()
+
+            # Validate workflow host repository early to fail fast on missing source repo.
+            self._validate_org_workflow_repository()
             
             # Check if rate limit is critically low before proceeding
             self._wait_for_rate_limit_reset()
