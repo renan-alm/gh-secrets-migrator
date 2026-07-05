@@ -48,7 +48,7 @@ jobs:
           pytest tests/ -v --tb=short --cov=src --cov-report=xml 2>/dev/null || echo "No tests configured"
 
       - name: Upload coverage
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           files: ./coverage.xml
           flags: unittests
