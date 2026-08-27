@@ -1,5 +1,6 @@
 """Command-line interface for GitHub Secrets Migrator."""
 import os
+import re
 import click
 from src.utils.logger import Logger
 from src.core.migrator import Migrator
@@ -71,6 +72,27 @@ OPTION_GROUPS = [
         ("--verbose", "--verbose"),
     ]),
 ]
+
+
+MAX_GH_NAME_LENGTH = 100
+VALID_GH_NAME_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def _normalize_text(value):
+    """Normalize CLI text input by converting None to empty and trimming whitespace."""
+    return (value or "").strip()
+
+
+def _validate_github_name(value, label):
+    """Validate basic GitHub org/repo input shape for fast user feedback."""
+    if not value:
+        raise ValueError(f"{label} cannot be empty")
+    if len(value) > MAX_GH_NAME_LENGTH:
+        raise ValueError(f"{label} is too long (max {MAX_GH_NAME_LENGTH} characters)")
+    if not VALID_GH_NAME_PATTERN.match(value):
+        raise ValueError(
+            f"Invalid {label}: '{value}'. Allowed characters: letters, numbers, '.', '-', '_'"
+        )
 
 
 class FriendlyCommand(click.Command):
@@ -275,6 +297,11 @@ def migrate(
     """
     logger = Logger(verbose=verbose)
 
+    source_org = _normalize_text(source_org)
+    source_repo = _normalize_text(source_repo)
+    target_org = _normalize_text(target_org)
+    target_repo = _normalize_text(target_repo)
+
     # Validate all required options and report ALL missing ones at once
     missing = []
     if not source_org:
@@ -291,6 +318,14 @@ def migrate(
         click.echo("Try 'gh secrets-migrator --help' for help.", err=True)
         raise SystemExit(1)
 
+    try:
+        _validate_github_name(source_org, "source-org")
+        _validate_github_name(source_repo, "source-repo")
+        _validate_github_name(target_org, "target-org")
+    except ValueError as e:
+        logger.error(str(e))
+        raise SystemExit(1)
+
     # Validate modes
     if org_to_org:
         # For org-to-org: source-repo required, target-repo optional (defaults to source-repo name)
@@ -302,6 +337,11 @@ def migrate(
         if not target_repo:
             logger.error("target-repo is required for repo-to-repo migration")
             logger.error("(or use --org-to-org flag for organization-to-organization migration)")
+            raise SystemExit(1)
+        try:
+            _validate_github_name(target_repo, "target-repo")
+        except ValueError as e:
+            logger.error(str(e))
             raise SystemExit(1)
         logger.info("Repository-to-Repository mode")
         logger.info(f"Source: {source_org}/{source_repo}")
@@ -352,11 +392,25 @@ def migrate(
             logger.info(f"Using {target_token_source} for target authentication")
 
     # Validate we have PATs for both
-    if not source_pat_value or not target_pat_value:
+    source_pat_value = _normalize_text(source_pat_value)
+    target_pat_value = _normalize_text(target_pat_value)
+
+    if not source_pat_value and not target_pat_value:
         logger.error(
-            "source-pat and target-pat are required "
-            "(or set SOURCE_PAT/TARGET_PAT, GH_SOURCE_PAT/GH_PAT, "
-            "or GITHUB_TOKEN environment variables)"
+            "Missing authentication for source and target. "
+            "Set SOURCE_PAT/TARGET_PAT, GH_SOURCE_PAT/GH_PAT, or GITHUB_TOKEN."
+        )
+        raise SystemExit(1)
+    if not source_pat_value:
+        logger.error(
+            "Missing source authentication token. "
+            "Set --source-pat, SOURCE_PAT, GH_SOURCE_PAT, GH_PAT, or GITHUB_TOKEN."
+        )
+        raise SystemExit(1)
+    if not target_pat_value:
+        logger.error(
+            "Missing target authentication token. "
+            "Set --target-pat, TARGET_PAT, GH_PAT, or GITHUB_TOKEN."
         )
         raise SystemExit(1)
 

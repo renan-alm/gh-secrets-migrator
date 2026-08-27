@@ -1,4 +1,4 @@
-.PHONY: help install dev lint format test run clean build build-mac build-linux build-windows build-onefile
+.PHONY: help install dev lint format test run clean build compile build-mac build-linux build-windows build-onefile
 
 help:
 	@echo "GitHub Secrets Migrator - Makefile targets:"
@@ -9,6 +9,7 @@ help:
 	@echo "  test           - Run tests"
 	@echo "  run            - Run the migrator"
 	@echo "  build          - Build for current platform (onedir)"
+	@echo "  compile        - Compile local binary and copy to bin/"
 	@echo "  build-mac      - Build for macOS (Intel + Apple Silicon)"
 	@echo "  build-linux    - Build for Linux"
 	@echo "  build-windows  - Build for Windows"
@@ -39,6 +40,9 @@ build:
 	@mkdir -p bin
 	@cp -r dist/bin/* bin/
 	@echo "✅ Build complete! Executable in bin/"
+
+compile: build
+	@echo "✅ Compile complete! Run ./bin/gh-secrets-migrator --help"
 
 build-mac:
 	python -m PyInstaller gh-secrets-migrator.spec --clean
@@ -74,4 +78,4 @@ clean:
 	find . -type f -name '*.pyc' -delete
 	rm -rf build/ dist/ bin/ *.egg-info
 
-.PHONY: help install dev lint format test run clean build build-mac build-linux build-windows build-onefile
+.PHONY: help install dev lint format test run clean build compile build-mac build-linux build-windows build-onefile
